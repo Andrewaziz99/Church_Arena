@@ -14,68 +14,62 @@ class DashboardScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Full-screen background ────────────────────────────────────
+          // ── Background ────────────────────────────────────────────────
           Image.asset('assets/images/Background.png', fit: BoxFit.cover),
           Container(color: Colors.black.withValues(alpha: 0.45)),
 
           // ── Content ───────────────────────────────────────────────────
           SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+              child: Column(
+                children: [
+                  // Logo
+                  Image.asset(
+                    'assets/images/Logo.png',
+                    height: 90,
+                    fit: BoxFit.contain,
+                  )
+                      .animate()
+                      .fadeIn(duration: 500.ms)
+                      .scale(
+                        begin: const Offset(0.85, 0.85),
+                        end: const Offset(1.0, 1.0),
+                        duration: 500.ms,
+                        curve: Curves.easeOut,
+                      ),
 
-                // Logo
-                Image.asset(
-                  'assets/images/Logo.png',
-                  height: 110,
-                  fit: BoxFit.contain,
-                )
-                    .animate()
-                    .fadeIn(duration: 500.ms)
-                    .scale(
-                      begin: const Offset(0.85, 0.85),
-                      end: const Offset(1.0, 1.0),
-                      duration: 500.ms,
-                      curve: Curves.easeOut,
-                    ),
+                  const SizedBox(height: 20),
 
-                const SizedBox(height: 32),
-
-                // ── Banner category buttons ───────────────────────────
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  // ── Banner buttons — stacked vertically, full width ────
+                  Expanded(
+                    child: Column(
                       children: [
                         _BannerButton(
                           assetPath: 'assets/images/Banners/1&2.jpeg',
                           label: 'اولى وثانية',
                           delay: 0,
                         ),
-                        const SizedBox(width: 20),
+                        const SizedBox(height: 14),
                         _BannerButton(
                           assetPath: 'assets/images/Banners/3&4.jpeg',
                           label: 'ثالثة ورابعة',
-                          delay: 120,
+                          delay: 100,
                         ),
-                        const SizedBox(width: 20),
+                        const SizedBox(height: 14),
                         _BannerButton(
                           assetPath: 'assets/images/Banners/5&6.jpeg',
                           label: 'خامسة وسادسة',
-                          delay: 240,
+                          delay: 200,
                         ),
                       ],
                     ),
                   ),
-                ),
 
-                const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                // ── Secondary nav row ─────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 28),
-                  child: Row(
+                  // ── Secondary nav row ─────────────────────────────────
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _IconNavButton(
@@ -85,26 +79,28 @@ class DashboardScreen extends StatelessWidget {
                         color: AppColors.accent,
                         delay: 300,
                       ),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 28),
                       _IconNavButton(
                         icon: Icons.group,
                         label: AppStrings.teams,
                         route: '/teams',
                         color: AppColors.success,
-                        delay: 380,
+                        delay: 370,
                       ),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 28),
                       _IconNavButton(
                         icon: Icons.settings,
                         label: AppStrings.settings,
                         route: '/settings',
                         color: AppColors.textSecondary,
-                        delay: 460,
+                        delay: 440,
                       ),
                     ],
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
         ],
@@ -147,93 +143,101 @@ class _BannerButtonState extends State<_BannerButton> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: _hovered
                     ? AppColors.primary.withValues(alpha: 0.9)
-                    : Colors.white.withValues(alpha: 0.2),
+                    : Colors.white.withValues(alpha: 0.15),
                 width: _hovered ? 3 : 1,
               ),
               boxShadow: _hovered
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                        blurRadius: 24,
+                        color: AppColors.primary.withValues(alpha: 0.45),
+                        blurRadius: 28,
                         spreadRadius: 4,
-                      )
+                      ),
                     ]
                   : [],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(19),
+              borderRadius: BorderRadius.circular(15),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Banner image
+                  // Banner image — fills full width, crops height equally
                   AnimatedScale(
-                    scale: _hovered ? 1.04 : 1.0,
+                    scale: _hovered ? 1.03 : 1.0,
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeOut,
                     child: Image.asset(
                       widget.assetPath,
                       fit: BoxFit.cover,
+                      alignment: Alignment.center,
                     ),
                   ),
 
-                  // Bottom gradient + label
+                  // Subtle dark veil so text is always legible
+                  Container(
+                    color: Colors.black.withValues(
+                      alpha: _hovered ? 0.25 : 0.35,
+                    ),
+                  ),
+
+                  // Grade label — right-aligned (Arabic)
                   Positioned(
-                    left: 0,
-                    right: 0,
+                    right: 28,
+                    top: 0,
                     bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.85),
-                            Colors.transparent,
+                    child: Center(
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 200),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: _hovered ? 36 : 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                          shadows: const [
+                            Shadow(
+                              color: Colors.black54,
+                              blurRadius: 8,
+                              offset: Offset(1, 1),
+                            ),
                           ],
                         ),
+                        child: Text(
+                          widget.label,
+                          textDirection: TextDirection.rtl,
+                        ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.label,
-                            textAlign: TextAlign.center,
-                            textDirection: TextDirection.rtl,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
+                    ),
+                  ),
+
+                  // "Start" pill — left side, visible on hover
+                  Positioned(
+                    left: 28,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: _hovered ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: const Text(
+                            'ابدأ اللعبة',
+                            style: TextStyle(
+                              color: Colors.black,
                               fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
+                              fontSize: 18,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          AnimatedOpacity(
-                            opacity: _hovered ? 1 : 0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Text(
-                                'ابدأ اللعبة',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -246,7 +250,7 @@ class _BannerButtonState extends State<_BannerButton> {
     )
         .animate(delay: Duration(milliseconds: widget.delay))
         .fadeIn(duration: 450.ms)
-        .slideY(begin: 0.15, end: 0);
+        .slideX(begin: -0.05, end: 0);
   }
 }
 
@@ -284,7 +288,8 @@ class _IconNavButtonState extends State<_IconNavButton> {
         onTap: () => context.go(widget.route),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
           decoration: BoxDecoration(
             color: _hovered
                 ? widget.color.withValues(alpha: 0.15)

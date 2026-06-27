@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/context_extensions.dart';
+import '../../../questions/domain/entities/question.dart';
 import '../../../scoreboard/presentation/bloc/scoreboard_bloc.dart';
 import '../bloc/game_bloc.dart';
 import '../widgets/buzzer_animation_widget.dart';
@@ -150,23 +151,26 @@ class _GameLayout extends StatelessWidget {
           ),
           Container(color: Colors.black.withValues(alpha: 0.55)),
 
-          Column(
-            children: [
-              _TopBar(session: session),
-              if (currentQ != null)
-                Expanded(
-                  child: QuestionDisplayWidget(question: currentQ),
+          // Positioned.fill gives the Column tight bounds so Expanded works
+          Positioned.fill(
+            child: Column(
+              children: [
+                _TopBar(session: session),
+                if (currentQ != null)
+                  Expanded(
+                    child: QuestionDisplayWidget(question: currentQ),
+                  ),
+                _ControlBar(
+                  session: session,
+                  isBuzzed: isBuzzed,
+                  isPaused: isPaused,
                 ),
-              _ControlBar(
-                session: session,
-                isBuzzed: isBuzzed,
-                isPaused: isPaused,
-              ),
-              TeamScoresBar(
-                teams: session.teams,
-                buzzedTeamId: session.buzzedTeamId,
-              ),
-            ],
+                TeamScoresBar(
+                  teams: session.teams,
+                  buzzedTeamId: session.buzzedTeamId,
+                ),
+              ],
+            ),
           ),
           if (isBuzzed && session.buzzedTeamId != null)
             BuzzerAnimationWidget(
@@ -225,7 +229,7 @@ class _TopBar extends StatelessWidget {
               backgroundColor: AppColors.surfaceLight,
             ),
             const SizedBox(width: 8),
-            _DiffBadge(difficulty: currentQ.difficulty.name),
+            _DiffBadge(difficulty: currentQ.difficulty),
           ],
           const Spacer(),
           Text(
@@ -245,29 +249,33 @@ class _TopBar extends StatelessWidget {
 }
 
 class _DiffBadge extends StatelessWidget {
-  final String difficulty;
+  final DifficultyLevel difficulty;
   const _DiffBadge({required this.difficulty});
 
   @override
   Widget build(BuildContext context) {
-    Color color;
+    final Color color;
+    final String label;
     switch (difficulty) {
-      case 'easy':
+      case DifficultyLevel.easy:
         color = AppColors.success;
-      case 'hard':
+        label = 'Easy';
+      case DifficultyLevel.hard:
         color = AppColors.error;
-      default:
+        label = 'Hard';
+      case DifficultyLevel.medium:
         color = AppColors.accent;
+        label = 'Medium';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.6)),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
       ),
       child: Text(
-        difficulty[0].toUpperCase() + difficulty.substring(1),
+        label,
         style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );

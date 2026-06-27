@@ -26,6 +26,7 @@ class AppStrings {
   static const String noTeamsYet       = 'No teams yet. Add your first team!';
   static const String teamsManager     = 'Teams Manager';
   static const String teamName         = 'Team Name';
+  static const String categoryName     = 'Category Name';
   static const String selectColor      = 'Select Color';
 
   static const String addQuestion      = 'Add Question';

@@ -164,7 +164,7 @@ class _CategoryPanel extends StatelessWidget {
               TextField(
                 controller: nameCtrl,
                 decoration: const InputDecoration(
-                  labelText: AppStrings.teamName,
+                  labelText: AppStrings.categoryName,
                   hintText: 'e.g. Bible Knowledge',
                 ),
               ),
