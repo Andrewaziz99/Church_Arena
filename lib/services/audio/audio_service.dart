@@ -1,5 +1,5 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:injectable/injectable.dart';
-import 'package:just_audio/just_audio.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/app_logger.dart';
 
@@ -17,11 +17,12 @@ class AudioService {
     await _player.setVolume(volume);
   }
 
+  /// audioplayers AssetSource uses the path relative to the assets/ folder,
+  /// so 'assets/audio/buzzer.mp3' becomes AssetSource('audio/buzzer.mp3').
   Future<void> _play(String assetPath) async {
     try {
       await _player.stop();
-      await _player.setAsset(assetPath);
-      await _player.play();
+      await _player.play(AssetSource(assetPath.replaceFirst('assets/', '')));
     } catch (e) {
       AppLogger.e('AudioService error: $e');
     }
@@ -33,7 +34,7 @@ class AudioService {
   Future<void> playTick()      => _play(AppConstants.tickSoundPath);
   Future<void> playVictory()   => _play(AppConstants.victoryFanfarePath);
   Future<void> playCountdown() => _play(AppConstants.countdownSoundPath);
-  Future<void> stopAll() async => _player.stop();
+  Future<void> stopAll()       async => _player.stop();
 
   @disposeMethod
   void dispose() => _player.dispose();
