@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -23,7 +24,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.settingsTitle)),
+      appBar: AppBar(
+        title: const Text(AppStrings.settingsTitle),
+        leading: BackButton(onPressed: () => context.go('/')),
+      ),
       body: BlocConsumer<SettingsBloc, SettingsState>(
         listener: (context, state) {
           if (state is SettingsError) {

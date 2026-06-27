@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -19,6 +20,7 @@ class QuestionsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.questions),
+        leading: BackButton(onPressed: () => context.go('/')),
         actions: [
           TextButton.icon(
             onPressed: () => _importQuestions(context),

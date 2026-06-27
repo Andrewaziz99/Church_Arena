@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -17,6 +18,7 @@ class TeamsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.teamsManager),
+        leading: BackButton(onPressed: () => context.go('/')),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => showDialog(
