@@ -288,7 +288,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     _stopBuzzTimer();
     await audioService.playVictory();
     final session = _sessionFromState();
-    final sorted = [...(session?.teams ?? [])]
+    final sorted = [...(session?.teams ?? <Team>[])]
       ..sort((a, b) => b.score.compareTo(a.score));
     await repository.clearSession();
     emit(GameEnded(sorted));
