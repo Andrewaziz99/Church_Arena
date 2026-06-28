@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  audioplayers_windows
   flutter_libserialport
   screen_retriever
   sqlite3_flutter_libs
