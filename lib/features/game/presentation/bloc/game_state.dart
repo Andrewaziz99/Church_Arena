@@ -16,7 +16,7 @@ class GameLoading extends GameState {
   List<Object> get props => [];
 }
 
-/// Question shown, timer NOT started — waiting for first buzz.
+/// Question shown, timer NOT started — waiting for buzz.
 class GameWaitingBuzz extends GameState {
   final GameSession session;
   const GameWaitingBuzz(this.session);
@@ -33,7 +33,7 @@ class GameBuzzedDisplay extends GameState {
   List<Object> get props => [session, secondsLeft];
 }
 
-/// Timer running — buzzed team is actively answering.
+/// Timer running — buzzed team is actively answering (R1 / R2).
 class GameInProgress extends GameState {
   final GameSession session;
   const GameInProgress(this.session);
@@ -41,7 +41,7 @@ class GameInProgress extends GameState {
   List<Object> get props => [session];
 }
 
-/// First team answered wrong; waiting for a second team to buzz.
+/// R1 / R2: first team answered wrong; waiting for a second team to buzz.
 class GameWaitingSecondTeam extends GameState {
   final GameSession session;
   const GameWaitingSecondTeam(this.session);
@@ -55,6 +55,43 @@ class GamePaused extends GameState {
   @override
   List<Object> get props => [session];
 }
+
+// ── 3-round competition states ────────────────────────────────────────────────
+
+/// R1 / R3: full-screen "Team X's turn" intro between teams.
+class GameTeamTurn extends GameState {
+  final GameSession session;
+  const GameTeamTurn(this.session);
+  @override
+  List<Object> get props => [session];
+}
+
+/// R2: full-screen "Team A vs Team B" display before each pair's question.
+class GamePairDisplay extends GameState {
+  final GameSession session;
+  const GamePairDisplay(this.session);
+  @override
+  List<Object> get props => [session];
+}
+
+/// Shown between rounds: "Round N complete — press to continue".
+class GameRoundTransition extends GameState {
+  final List<Team> teams;
+  final int completedRound; // 1 or 2 (3 → goes directly to GameEnded)
+  const GameRoundTransition(this.teams, this.completedRound);
+  @override
+  List<Object> get props => [teams, completedRound];
+}
+
+/// R3 "Under Pressure": shared timer running, controller drives Correct/Wrong/Skip.
+class GamePressureQuestion extends GameState {
+  final GameSession session;
+  const GamePressureQuestion(this.session);
+  @override
+  List<Object> get props => [session];
+}
+
+// ── Terminal states ───────────────────────────────────────────────────────────
 
 class GameEnded extends GameState {
   final List<Team> teams;

@@ -10,10 +10,28 @@ class AppStrings {
   static const String settings         = 'Settings';
 
   static const String startGame        = 'Start Game';
+  static const String startCompetition = 'Start Competition';
   static const String endGame          = 'End Game';
   static const String pauseGame        = 'Pause';
   static const String resumeGame       = 'Resume';
   static const String nextQuestion     = 'Next Question';
+  static const String skipQuestion     = 'Skip';
+
+  // Competition rounds
+  static const String round1Name       = 'الفقرة الأولى';
+  static const String round2Name       = 'الفقرة الثانية — ضربات جزاء';
+  static const String round3Name       = 'الفقرة الثالثة — تحت الضغط';
+  static const String roundComplete    = 'انتهت الفقرة';
+  static const String nextRound        = 'الفقرة التالية';
+  static const String finalResults     = 'عرض النتائج';
+  static const String teamTurnTitle    = 'دور الفريق';
+  static const String startTurn        = 'ابدأ!';
+  static const String vsLabel          = 'VS';
+  static const String doublePoints     = '×2  ضعف';
+  static const String doubleActivated  = '×2 مفعّل';
+  static const String contestant       = 'متسابق';
+  static const String questionsPerTeam = 'أسئلة لكل فريق';
+  static const String sharedTimer      = 'وقت الفريق المشترك';
 
   static const String correct          = 'Correct';
   static const String wrong            = 'Wrong';
