@@ -153,43 +153,73 @@ class _CategoryPanel extends StatelessWidget {
   void _showAddCategoryDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
     int selectedColor = AppColors.primary.value;
+    String selectedSection = '';
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           title: const Text(AppStrings.addCategory),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: AppStrings.categoryName,
-                  hintText: 'e.g. Bible Knowledge',
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: AppStrings.categoryName,
+                    hintText: 'e.g. Bible Knowledge',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                children: AppColors.teamColors.map((color) {
-                  final isSelected = selectedColor == color.value;
-                  return GestureDetector(
-                    onTap: () => setState(() => selectedColor = color.value),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: isSelected
-                            ? Border.all(color: Colors.white, width: 3)
-                            : null,
-                      ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedSection.isEmpty ? null : selectedSection,
+                  decoration: const InputDecoration(
+                    labelText: AppStrings.section,
+                    hintText: 'All sections',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text(AppStrings.allSections,
+                          style:
+                              TextStyle(color: AppColors.textSecondary)),
                     ),
-                  );
-                }).toList(),
-              ),
-            ],
+                    ...AppStrings.sections.map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s,
+                              textDirection: TextDirection.rtl,
+                              style: const TextStyle(
+                                  color: AppColors.textPrimary)),
+                        )),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => selectedSection = v ?? ''),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  children: AppColors.teamColors.map((color) {
+                    final isSelected = selectedColor == color.value;
+                    return GestureDetector(
+                      onTap: () =>
+                          setState(() => selectedColor = color.value),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: isSelected
+                              ? Border.all(color: Colors.white, width: 3)
+                              : null,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -204,6 +234,7 @@ class _CategoryPanel extends StatelessWidget {
                         id: const Uuid().v4(),
                         name: nameCtrl.text.trim(),
                         color: selectedColor,
+                        section: selectedSection,
                       )),
                     );
                 Navigator.pop(ctx);

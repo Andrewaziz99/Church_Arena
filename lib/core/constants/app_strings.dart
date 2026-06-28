@@ -44,6 +44,9 @@ class AppStrings {
 
   static const String addCategory      = 'Add Category';
   static const String allCategories    = 'All';
+  static const String section          = 'Section';
+  static const String allSections      = 'All Sections';
+  static const List<String> sections   = ['اولى وثانية', 'ثالثة ورابعة', 'خامسة وسادسة'];
 
   static const String save             = 'Save';
   static const String cancel           = 'Cancel';

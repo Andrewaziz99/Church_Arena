@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'package:injectable/injectable.dart';
 import '../../core/utils/app_logger.dart';
@@ -58,6 +59,19 @@ class ArduinoService {
   }
 
   void resetBuzzers() => _locked = false;
+
+  /// Sends 'R' over serial to the Arduino and unlocks the buzzer lock.
+  void sendResetSignal() {
+    if (_port != null && _port!.isOpen) {
+      try {
+        _port!.write(Uint8List.fromList('R'.codeUnits));
+        AppLogger.d('Reset signal sent to Arduino');
+      } catch (e) {
+        AppLogger.e('Failed to send reset signal: $e');
+      }
+    }
+    _locked = false;
+  }
 
   void disconnect() {
     _reader?.close();

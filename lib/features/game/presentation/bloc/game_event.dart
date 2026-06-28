@@ -26,6 +26,14 @@ class BuzzerPressed extends GameEvent {
   List<Object> get props => [teamId];
 }
 
+/// Internal: tick for the 3-second buzz-display countdown.
+class BuzzCountdownTick extends GameEvent {
+  const BuzzCountdownTick();
+  @override
+  List<Object> get props => [];
+}
+
+/// Sends a reset signal to the Arduino and unlocks the buzzer.
 class ResetBuzzer extends GameEvent {
   const ResetBuzzer();
   @override
@@ -53,12 +61,6 @@ class PauseTimer extends GameEvent {
 
 class ResumeTimer extends GameEvent {
   const ResumeTimer();
-  @override
-  List<Object> get props => [];
-}
-
-class StopTimer extends GameEvent {
-  const StopTimer();
   @override
   List<Object> get props => [];
 }

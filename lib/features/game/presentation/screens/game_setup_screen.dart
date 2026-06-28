@@ -3,8 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../core/widgets/glow_button.dart';
+import '../../../questions/domain/entities/category.dart';
 import '../../../questions/domain/entities/question.dart';
 import '../../../questions/presentation/bloc/questions_bloc.dart';
 import '../../../settings/presentation/bloc/settings_bloc.dart';
@@ -13,9 +15,9 @@ import '../../../teams/presentation/bloc/teams_bloc.dart';
 import '../bloc/game_bloc.dart';
 
 /// Full-screen setup wizard shown before a game starts.
-/// Lets the user pick teams, filter questions, and set the timer.
+/// [sectionName] is passed from the banner buttons (e.g. 'اولى وثانية').
 class GameSetupScreen extends StatefulWidget {
-  /// Optional category name to pre-select (passed from the banner buttons).
+  /// Competition section from the banner (used to filter teams & categories).
   final String? preselectedCategoryName;
 
   const GameSetupScreen({super.key, this.preselectedCategoryName});
@@ -26,41 +28,59 @@ class GameSetupScreen extends StatefulWidget {
 
 class _GameSetupScreenState extends State<GameSetupScreen> {
   final Set<String> _selectedTeamIds = {};
-  String? _selectedCategoryId; // null = all
-  DifficultyLevel? _selectedDifficulty; // null = all
+  String? _selectedCategoryId;
+  DifficultyLevel? _selectedDifficulty;
   int _timerSeconds = 30;
   bool _randomOrder = true;
+
+  /// The section passed from the banner (null = no section filter).
+  String? get _sectionName => widget.preselectedCategoryName;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill timer from settings
     final settingsState = context.read<SettingsBloc>().state;
     if (settingsState is SettingsLoaded) {
       _timerSeconds = settingsState.settings.timerDuration;
     }
-    // Pre-select category from banner if provided
-    if (widget.preselectedCategoryName != null) {
-      final qState = context.read<QuestionsBloc>().state;
-      if (qState is QuestionsLoaded) {
-        final match = qState.categories.where(
-          (c) => c.name == widget.preselectedCategoryName,
-        );
-        if (match.isNotEmpty) _selectedCategoryId = match.first.id;
-      }
+    // Auto-select all teams belonging to this section
+    final teamsState = context.read<TeamsBloc>().state;
+    if (teamsState is TeamsLoaded && _sectionName != null) {
+      final sectionTeams = _teamsForSection(teamsState.teams);
+      _selectedTeamIds.addAll(sectionTeams.map((t) => t.id));
     }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  List<Team> _teamsForSection(List<Team> all) {
+    if (_sectionName == null) return all;
+    return all
+        .where((t) => t.section == _sectionName || t.section.isEmpty)
+        .toList();
+  }
+
+  List<Category> _categoriesForSection(List<Category> all) {
+    if (_sectionName == null) return all;
+    return all
+        .where((c) => c.section == _sectionName || c.section.isEmpty)
+        .toList();
   }
 
   List<Team> get _teams {
     final state = context.read<TeamsBloc>().state;
-    if (state is TeamsLoaded) return state.teams;
+    if (state is TeamsLoaded) return _teamsForSection(state.teams);
     return [];
   }
 
   List<Question> get _filteredQuestions {
     final state = context.read<QuestionsBloc>().state;
     if (state is! QuestionsLoaded) return [];
+    final sectionCategoryIds = _categoriesForSection(state.categories)
+        .map((c) => c.id)
+        .toSet();
     return state.questions.where((q) {
+      if (!sectionCategoryIds.contains(q.categoryId)) return false;
       if (_selectedCategoryId != null && q.categoryId != _selectedCategoryId) {
         return false;
       }
@@ -72,8 +92,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   }
 
   void _startGame() {
-    final teams =
-        _teams.where((t) => _selectedTeamIds.contains(t.id)).toList();
+    final teams = _teams.where((t) => _selectedTeamIds.contains(t.id)).toList();
     if (teams.length < 2) {
       context.showSnackBar('Select at least 2 teams.', isError: true);
       return;
@@ -84,7 +103,6 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
       return;
     }
     if (_randomOrder) questions = [...questions]..shuffle();
-
     context.read<GameBloc>().add(StartGame(teams, questions, _timerSeconds));
     context.go('/game');
   }
@@ -93,13 +111,17 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   Widget build(BuildContext context) {
     final teams = _teams;
     final questionsState = context.watch<QuestionsBloc>().state;
-    final categories =
-        questionsState is QuestionsLoaded ? questionsState.categories : [];
+    final allCategories = questionsState is QuestionsLoaded
+        ? questionsState.categories
+        : <Category>[];
+    final sectionCategories = _categoriesForSection(allCategories);
     final availableCount = _filteredQuestions.length;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Game Setup'),
+        title: Text(_sectionName != null
+            ? 'Game Setup — $_sectionName'
+            : 'Game Setup'),
         leading: BackButton(onPressed: () => context.go('/')),
       ),
       body: SingleChildScrollView(
@@ -107,12 +129,48 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Teams ──────────────────────────────────────────────────────
-            _SectionHeader(title: 'Select Teams', subtitle: 'Choose 2–8 teams'),
+            // Section badge
+            if (_sectionName != null) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.group, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      _sectionName!,
+                      textDirection: TextDirection.rtl,
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+
+            // ── Teams ────────────────────────────────────────────────────────
+            _SectionHeader(
+              title: 'Select Teams',
+              subtitle: 'Choose 2–8 teams${_sectionName != null ? ' for this section' : ''}',
+            ),
             const SizedBox(height: 12),
             if (teams.isEmpty)
               _EmptyHint(
-                message: 'No teams yet.',
+                message: _sectionName != null
+                    ? 'No teams assigned to this section yet.'
+                    : 'No teams yet.',
                 action: 'Add Teams',
                 onTap: () => context.go('/teams'),
               )
@@ -137,13 +195,11 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                           horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
                         color: selected
-                            ? teamColor.withOpacity(0.2)
+                            ? teamColor.withValues(alpha: 0.2)
                             : AppColors.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: selected
-                              ? teamColor
-                              : AppColors.border,
+                          color: selected ? teamColor : AppColors.border,
                           width: selected ? 2 : 1,
                         ),
                       ),
@@ -185,7 +241,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 
             const SizedBox(height: 28),
 
-            // ── Questions filter ───────────────────────────────────────────
+            // ── Questions filter ─────────────────────────────────────────────
             _SectionHeader(
               title: 'Questions',
               subtitle: '$availableCount available',
@@ -199,7 +255,6 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                 onTap: () => context.go('/questions'),
               )
             else ...[
-              // Category filter
               Text('Category',
                   style: TextStyle(
                       color: AppColors.textSecondary, fontSize: 13)),
@@ -215,7 +270,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                     onTap: () =>
                         setState(() => _selectedCategoryId = null),
                   ),
-                  ...categories.map((c) => _FilterChip(
+                  ...sectionCategories.map((c) => _FilterChip(
                         label: c.name,
                         selected: _selectedCategoryId == c.id,
                         color: Color(c.color),
@@ -225,7 +280,6 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Difficulty filter
               Text('Difficulty',
                   style: TextStyle(
                       color: AppColors.textSecondary, fontSize: 13)),
@@ -241,8 +295,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                           setState(() => _selectedDifficulty = null)),
                   _FilterChip(
                       label: 'Easy',
-                      selected:
-                          _selectedDifficulty == DifficultyLevel.easy,
+                      selected: _selectedDifficulty == DifficultyLevel.easy,
                       color: AppColors.success,
                       onTap: () => setState(
                           () => _selectedDifficulty = DifficultyLevel.easy)),
@@ -255,8 +308,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                           _selectedDifficulty = DifficultyLevel.medium)),
                   _FilterChip(
                       label: 'Hard',
-                      selected:
-                          _selectedDifficulty == DifficultyLevel.hard,
+                      selected: _selectedDifficulty == DifficultyLevel.hard,
                       color: AppColors.error,
                       onTap: () => setState(
                           () => _selectedDifficulty = DifficultyLevel.hard)),
@@ -266,7 +318,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 
             const SizedBox(height: 28),
 
-            // ── Timer ──────────────────────────────────────────────────────
+            // ── Timer ────────────────────────────────────────────────────────
             _SectionHeader(
               title: 'Timer',
               subtitle: '$_timerSeconds seconds per question',
@@ -295,7 +347,6 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 
             const SizedBox(height: 16),
 
-            // ── Random order ───────────────────────────────────────────────
             Row(
               children: [
                 Switch(
@@ -311,7 +362,6 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 
             const SizedBox(height: 36),
 
-            // ── Start button ───────────────────────────────────────────────
             Center(
               child: GlowButton.accent(
                 label: '🎮  Start Game',
@@ -328,7 +378,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   }
 }
 
-// ── Private helpers ────────────────────────────────────────────────────────────
+// ── Private helpers ───────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -346,8 +396,8 @@ class _SectionHeader extends StatelessWidget {
                 fontSize: 18,
                 fontWeight: FontWeight.bold)),
         Text(subtitle,
-            style:
-                const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 13)),
       ],
     );
   }
@@ -394,10 +444,11 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.2) : AppColors.surface,
+          color: selected
+              ? color.withValues(alpha: 0.2)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
               color: selected ? color : AppColors.border,
@@ -407,7 +458,8 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
                 color: selected ? color : AppColors.textSecondary,
                 fontSize: 13,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+                fontWeight:
+                    selected ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }

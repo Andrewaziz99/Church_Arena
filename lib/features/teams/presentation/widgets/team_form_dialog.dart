@@ -24,12 +24,14 @@ class _TeamFormDialogState extends State<TeamFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
   late int _selectedColor;
+  late String _selectedSection;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.team?.name ?? '');
     _selectedColor = widget.team?.color ?? AppColors.teamColors.first.value;
+    _selectedSection = widget.team?.section ?? '';
   }
 
   @override
@@ -58,10 +60,34 @@ class _TeamFormDialogState extends State<TeamFormDialog> {
                   hintText: 'e.g. Zion Warriors',
                 ),
                 autofocus: true,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty)
-                        ? AppStrings.nameRequired
-                        : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? AppStrings.nameRequired
+                    : null,
+              ),
+              const SizedBox(height: 20),
+              // Section dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedSection.isEmpty ? null : _selectedSection,
+                decoration: const InputDecoration(
+                  labelText: AppStrings.section,
+                  hintText: 'All sections',
+                ),
+                items: [
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text(AppStrings.allSections,
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  ),
+                  ...AppStrings.sections.map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s,
+                            textDirection: TextDirection.rtl,
+                            style:
+                                const TextStyle(color: AppColors.textPrimary)),
+                      )),
+                ],
+                onChanged: (v) =>
+                    setState(() => _selectedSection = v ?? ''),
               ),
               const SizedBox(height: 20),
               const Text(
@@ -90,13 +116,14 @@ class _TeamFormDialogState extends State<TeamFormDialog> {
                         border: isSelected
                             ? Border.all(color: Colors.white, width: 3)
                             : Border.all(
-                                color: Colors.white.withOpacity(0.2),
+                                color:
+                                    Colors.white.withValues(alpha: 0.2),
                                 width: 1,
                               ),
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: color.withOpacity(0.6),
+                                  color: color.withValues(alpha: 0.6),
                                   blurRadius: 8,
                                   spreadRadius: 1,
                                 ),
@@ -131,6 +158,7 @@ class _TeamFormDialogState extends State<TeamFormDialog> {
       name: _nameCtrl.text.trim(),
       color: _selectedColor,
       score: widget.team?.score ?? 0,
+      section: _selectedSection,
     );
     widget.blocContext.read<TeamsBloc>().add(SaveTeam(team));
     Navigator.pop(context);

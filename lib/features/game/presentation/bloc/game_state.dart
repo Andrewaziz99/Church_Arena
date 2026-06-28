@@ -16,6 +16,24 @@ class GameLoading extends GameState {
   List<Object> get props => [];
 }
 
+/// Question shown, timer NOT started — waiting for first buzz.
+class GameWaitingBuzz extends GameState {
+  final GameSession session;
+  const GameWaitingBuzz(this.session);
+  @override
+  List<Object> get props => [session];
+}
+
+/// A team buzzed — fullscreen team-name display for [secondsLeft] seconds (3→1).
+class GameBuzzedDisplay extends GameState {
+  final GameSession session;
+  final int secondsLeft;
+  const GameBuzzedDisplay(this.session, this.secondsLeft);
+  @override
+  List<Object> get props => [session, secondsLeft];
+}
+
+/// Timer running — buzzed team is actively answering.
 class GameInProgress extends GameState {
   final GameSession session;
   const GameInProgress(this.session);
@@ -23,9 +41,10 @@ class GameInProgress extends GameState {
   List<Object> get props => [session];
 }
 
-class GameBuzzed extends GameState {
+/// First team answered wrong; waiting for a second team to buzz.
+class GameWaitingSecondTeam extends GameState {
   final GameSession session;
-  const GameBuzzed(this.session);
+  const GameWaitingSecondTeam(this.session);
   @override
   List<Object> get props => [session];
 }
