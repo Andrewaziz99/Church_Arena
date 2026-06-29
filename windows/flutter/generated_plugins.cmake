@@ -3,10 +3,13 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   audioplayers_windows
   flutter_libserialport
+  passkeys_windows
   screen_retriever
   sqlite3_flutter_libs
+  url_launcher_windows
   window_manager
 )
 

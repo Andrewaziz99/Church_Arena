@@ -9,6 +9,7 @@ class TeamIsarModel {
   final String? logoPath;
   final bool isActive;
   final String section;
+  final List<String> members;
 
   const TeamIsarModel({
     required this.id,
@@ -18,6 +19,7 @@ class TeamIsarModel {
     this.logoPath,
     this.isActive = false,
     this.section = '',
+    this.members = const [],
   });
 
   Team toEntity() => Team(
@@ -28,6 +30,7 @@ class TeamIsarModel {
         logoPath: logoPath,
         isActive: isActive,
         section: section,
+        members: members,
       );
 
   static TeamIsarModel fromEntity(Team t) => TeamIsarModel(
@@ -38,6 +41,7 @@ class TeamIsarModel {
         logoPath: t.logoPath,
         isActive: t.isActive,
         section: t.section,
+        members: t.members,
       );
 
   Map<String, dynamic> toMap() => {
@@ -48,15 +52,20 @@ class TeamIsarModel {
         'logo_path': logoPath,
         'is_active': isActive ? 1 : 0,
         'section': section,
+        'members': members.join('||'),
       };
 
-  static TeamIsarModel fromMap(Map<String, dynamic> m) => TeamIsarModel(
-        id: m['id'] as String,
-        name: m['name'] as String,
-        color: m['color'] as int,
-        score: m['score'] as int,
-        logoPath: m['logo_path'] as String?,
-        isActive: (m['is_active'] as int) == 1,
-        section: (m['section'] as String?) ?? '',
-      );
+  static TeamIsarModel fromMap(Map<String, dynamic> m) {
+    final membersStr = (m['members'] as String?) ?? '';
+    return TeamIsarModel(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      color: m['color'] as int,
+      score: m['score'] as int,
+      logoPath: m['logo_path'] as String?,
+      isActive: (m['is_active'] as int) == 1,
+      section: (m['section'] as String?) ?? '',
+      members: membersStr.isEmpty ? [] : membersStr.split('||'),
+    );
+  }
 }

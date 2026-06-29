@@ -6,7 +6,7 @@ import 'package:path/path.dart';
 /// Singleton SQLite database manager (Windows Desktop via sqflite_common_ffi).
 class DatabaseHelper {
   static const _dbName = 'church_arena.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 4;
 
   static final DatabaseHelper instance = DatabaseHelper._();
   DatabaseHelper._();
@@ -19,7 +19,6 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    // Use FFI on Windows/Linux/macOS desktop
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
@@ -43,7 +42,8 @@ class DatabaseHelper {
         score INTEGER NOT NULL DEFAULT 0,
         logo_path TEXT,
         is_active INTEGER NOT NULL DEFAULT 0,
-        section TEXT NOT NULL DEFAULT ''
+        section TEXT NOT NULL DEFAULT '',
+        members TEXT NOT NULL DEFAULT ''
       )
     ''');
     await db.execute('''
@@ -66,16 +66,22 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         color INTEGER NOT NULL,
         question_ids TEXT NOT NULL DEFAULT '',
-        section TEXT NOT NULL DEFAULT ''
+        section TEXT NOT NULL DEFAULT '',
+        round_type TEXT NOT NULL DEFAULT ''
       )
     ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add section column to teams and categories
       await db.execute("ALTER TABLE teams ADD COLUMN section TEXT NOT NULL DEFAULT ''");
       await db.execute("ALTER TABLE categories ADD COLUMN section TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldVersion < 3) {
+      await db.execute("ALTER TABLE teams ADD COLUMN members TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldVersion < 4) {
+      await db.execute("ALTER TABLE categories ADD COLUMN round_type TEXT NOT NULL DEFAULT ''");
     }
   }
 }

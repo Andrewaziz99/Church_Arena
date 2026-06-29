@@ -108,7 +108,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
 
   @override
   Widget build(BuildContext context) {
-    final availablePorts = widget.arduinoService.getAvailablePorts();
+    final availablePorts = widget.arduinoService.getAvailablePorts().toSet().toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),

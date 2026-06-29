@@ -7,6 +7,7 @@ class CategoryIsarModel {
   final int color;
   final List<String> questionIds;
   final String section;
+  final String roundType;
 
   const CategoryIsarModel({
     required this.id,
@@ -14,6 +15,7 @@ class CategoryIsarModel {
     required this.color,
     this.questionIds = const [],
     this.section = '',
+    this.roundType = '',
   });
 
   Category toEntity() => Category(
@@ -22,6 +24,7 @@ class CategoryIsarModel {
         color: color,
         questionIds: questionIds,
         section: section,
+        roundType: roundType,
       );
 
   static CategoryIsarModel fromEntity(Category c) => CategoryIsarModel(
@@ -30,6 +33,7 @@ class CategoryIsarModel {
         color: c.color,
         questionIds: c.questionIds,
         section: c.section,
+        roundType: c.roundType,
       );
 
   Map<String, dynamic> toMap() => {
@@ -38,6 +42,7 @@ class CategoryIsarModel {
         'color': color,
         'question_ids': questionIds.join(';'),
         'section': section,
+        'round_type': roundType,
       };
 
   static CategoryIsarModel fromMap(Map<String, dynamic> m) {
@@ -48,6 +53,7 @@ class CategoryIsarModel {
       color: m['color'] as int,
       questionIds: idsStr.isEmpty ? [] : idsStr.split(';'),
       section: (m['section'] as String?) ?? '',
+      roundType: (m['round_type'] as String?) ?? '',
     );
   }
 }

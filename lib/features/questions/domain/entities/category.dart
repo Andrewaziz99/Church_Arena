@@ -7,6 +7,9 @@ class Category extends Equatable {
   final List<String> questionIds;
   /// Competition section this category belongs to, e.g. 'اولى وثانية'. Empty = all.
   final String section;
+  /// Which round this category's questions belong to.
+  /// 'r1' = أسئلة الفرق, 'r2' = ضربات جزاء, 'r3' = تحت الضغط, '' = any round.
+  final String roundType;
 
   const Category({
     required this.id,
@@ -14,6 +17,7 @@ class Category extends Equatable {
     required this.color,
     this.questionIds = const [],
     this.section = '',
+    this.roundType = '',
   });
 
   Category copyWith({
@@ -22,6 +26,7 @@ class Category extends Equatable {
     int? color,
     List<String>? questionIds,
     String? section,
+    String? roundType,
   }) {
     return Category(
       id: id ?? this.id,
@@ -29,9 +34,10 @@ class Category extends Equatable {
       color: color ?? this.color,
       questionIds: questionIds ?? this.questionIds,
       section: section ?? this.section,
+      roundType: roundType ?? this.roundType,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, color, questionIds, section];
+  List<Object?> get props => [id, name, color, questionIds, section, roundType];
 }

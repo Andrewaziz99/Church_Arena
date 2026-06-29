@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/context_extensions.dart';
+import '../../../../core/widgets/app_nav_sidebar.dart';
 import '../../../questions/domain/entities/question.dart';
 import '../../../scoreboard/presentation/bloc/scoreboard_bloc.dart';
 import '../../../teams/domain/entities/team.dart';
@@ -716,7 +718,7 @@ class _RoundTransitionScreen extends StatelessWidget {
                 border: Border.all(color: AppColors.border),
               ),
               child: Column(
-                children: sorted.map((t) {
+                children: sorted.map<Widget>((t) {
                   final color = Color(t.color);
                   return Padding(
                     padding: const EdgeInsets.symmetric(
@@ -1007,56 +1009,134 @@ class _GameLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentQ =
-        session.currentQuestionIndex < session.questions.length
-            ? session.questions[session.currentQuestionIndex]
-            : null;
+    final currentQ = session.currentQuestionIndex < session.questions.length
+        ? session.questions[session.currentQuestionIndex]
+        : null;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF5F0E8),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.asset('assets/images/Artboard.png',
-                fit: BoxFit.cover),
-          ),
-          Container(color: Colors.black.withValues(alpha: 0.55)),
+          Row(
+            children: [
+              // ── Left sidebar ──────────────────────────────────
+              const AppNavSidebar(activeRoute: '/game'),
 
-          Positioned.fill(
-            child: Column(
-              children: [
-                _TopBar(session: session, timerActive: timerActive),
-                if (isSecondTeamWaiting)
-                  _SecondTeamBanner(session: session),
-                if (showCorrectWrong && session.buzzedTeamId != null)
-                  _BuzzedTeamBadge(
-                    teams: session.teams,
-                    buzzedTeamId: session.buzzedTeamId!,
-                  ),
-                if (currentQ != null)
-                  Expanded(
-                      child: QuestionDisplayWidget(question: currentQ)),
-                _ControlBar(
-                  session: session,
-                  showCorrectWrong: showCorrectWrong,
-                  isPaused: isPaused,
-                  timerActive: timerActive,
+              // ── Center content ────────────────────────────────
+              Expanded(
+                child: Column(
+                  children: [
+                    _GameTopBar(session: session),
+                    if (isSecondTeamWaiting) _SecondTeamBanner(session: session),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            // Question card
+                            if (currentQ != null)
+                              Expanded(
+                                child: _QuestionCard(
+                                  question: currentQ,
+                                  buzzedTeamId: session.buzzedTeamId,
+                                  teams: session.teams,
+                                ),
+                              ),
+
+                            // Team buzz cards
+                            if (session.teams.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                height: 155,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: session.teams.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                                  itemBuilder: (context, i) {
+                                    final team = session.teams[i];
+                                    final isBuzzed = session.buzzedTeamId == team.id;
+                                    final color = Color(team.color);
+                                    final initials = team.name.split(' ').take(2).map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join();
+                                    return AnimatedContainer(
+                                      duration: const Duration(milliseconds: 250),
+                                      width: 130,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        borderRadius: BorderRadius.circular(18),
+                                        border: Border.all(
+                                          color: isBuzzed ? AppColors.orangeBg : AppColors.border,
+                                          width: isBuzzed ? 3 : 1.5,
+                                        ),
+                                        boxShadow: isBuzzed
+                                            ? [BoxShadow(color: AppColors.orangeBg.withOpacity(0.5), blurRadius: 18, spreadRadius: 1)]
+                                            : null,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          children: [
+                                            if (isBuzzed)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.orangeBg,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Text('BUZZED FIRST!', style: GoogleFonts.alexandria(fontSize: 8, fontWeight: FontWeight.w800, color: AppColors.orangeDark)),
+                                              )
+                                            else
+                                              const SizedBox(height: 17),
+                                            const SizedBox(height: 6),
+                                            Container(
+                                              width: 50,
+                                              height: 50,
+                                              decoration: BoxDecoration(
+                                                color: color.withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(13),
+                                                border: Border.all(color: color.withOpacity(0.45)),
+                                              ),
+                                              child: Center(
+                                                child: Text(initials, style: GoogleFonts.alexandria(color: color, fontWeight: FontWeight.w900, fontSize: 18)),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(team.name, style: GoogleFonts.alexandria(fontSize: 12, fontWeight: FontWeight.w700, color: isBuzzed ? AppColors.orangeDark : AppColors.textPrimary), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            Text('${team.score}', style: GoogleFonts.alexandria(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.blueContent)),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                TeamScoresBar(
-                  teams: session.teams,
-                  buzzedTeamId: session.buzzedTeamId,
-                ),
-              ],
-            ),
+              ),
+
+              // ── Right panel ───────────────────────────────────
+              _RightPanel(
+                session: session,
+                showCorrectWrong: showCorrectWrong,
+                isPaused: isPaused,
+                timerActive: timerActive,
+                currentQ: currentQ,
+              ),
+            ],
           ),
+
+          // Pause overlay
           if (isPaused)
             Positioned.fill(
               child: IgnorePointer(
                 child: Container(
-                  color: Colors.black45,
+                  color: Colors.black26,
                   child: const Center(
-                    child: Icon(Icons.pause_circle_filled,
-                        size: 120, color: AppColors.primary),
+                    child: Icon(Icons.pause_circle_filled, size: 120, color: AppColors.blueContent),
                   ),
                 ),
               ),
@@ -1067,174 +1147,309 @@ class _GameLayout extends StatelessWidget {
   }
 }
 
-// ── Top bar ───────────────────────────────────────────────────────────────────
+// ── Question card ─────────────────────────────────────────────────────────────
 
-class _TopBar extends StatelessWidget {
-  final GameSession session;
-  final bool timerActive;
+class _QuestionCard extends StatelessWidget {
+  final Question question;
+  final String? buzzedTeamId;
+  final List<Team> teams;
 
-  const _TopBar({required this.session, required this.timerActive});
+  const _QuestionCard({required this.question, this.buzzedTeamId, required this.teams});
 
   @override
   Widget build(BuildContext context) {
-    final currentQ =
-        session.currentQuestionIndex < session.questions.length
-            ? session.questions[session.currentQuestionIndex]
-            : null;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            // Decorative blobs
+            Positioned(top: -30, right: -30, child: Container(width: 140, height: 140, decoration: BoxDecoration(color: AppColors.orangeBg.withOpacity(0.25), shape: BoxShape.circle))),
+            Positioned(bottom: -20, left: -20, child: Container(width: 100, height: 100, decoration: BoxDecoration(color: AppColors.greenLight.withOpacity(0.22), shape: BoxShape.circle))),
+            // Bottom accent bar
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(height: 4, decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppColors.greenSuccess, AppColors.orangeBg]))),
+            ),
+            // Content
+            Positioned.fill(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(color: AppColors.greenSuccess, borderRadius: BorderRadius.circular(20)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.auto_awesome, size: 13, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Text('CURRENT CHALLENGE', style: GoogleFonts.alexandria(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      question.text,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.alexandria(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.textPrimary, height: 1.4),
+                      textDirection: TextDirection.rtl,
+                    ),
+                    // ── Multiple choice options ────────────────────
+                    if (question.options.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 4.2,
+                        ),
+                        itemCount: question.options.length.clamp(0, 4),
+                        itemBuilder: (_, i) {
+                          const letters = ['A', 'B', 'C', 'D'];
+                          const colors = [Color(0xFF1565C0), Color(0xFF2E7D32), Color(0xFF6A1B9A), Color(0xFFE65100)];
+                          final c = colors[i % colors.length];
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: c.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: c.withOpacity(0.45), width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 42,
+                                  decoration: BoxDecoration(
+                                    color: c.withOpacity(0.35),
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(11),
+                                      bottomLeft: Radius.circular(11),
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(letters[i], style: GoogleFonts.alexandria(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    child: Text(
+                                      question.options[i],
+                                      style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                      textAlign: TextAlign.center,
+                                      textDirection: TextDirection.rtl,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Game top bar ──────────────────────────────────────────────────────────────
+
+class _GameTopBar extends StatelessWidget {
+  final GameSession session;
+  const _GameTopBar({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
     final qNumber = session.currentQuestionIndex + 1;
     final total = session.questions.length;
-
-    // R1: show which team's turn it is
-    final currentTeam = (session.roundType == RoundType.classic)
-        ? session.currentTeam
-        : null;
+    final now = TimeOfDay.now();
+    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 56,
       color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.home,
-                color: AppColors.textSecondary),
-            onPressed: () => context.go('/'),
+          Text('VIBRANT QUIZ FESTIVAL', style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: 0.5)),
+          const SizedBox(width: 14),
+          Container(width: 1, height: 22, color: AppColors.border),
+          const SizedBox(width: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(8)),
+            child: Text('ROUND 2', style: GoogleFonts.alexandria(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: 0.5)),
           ),
-          const SizedBox(width: 8),
-          if (currentQ != null) ...[
-            Chip(
-              label: Text(currentQ.categoryId,
-                  style: const TextStyle(fontSize: 12)),
-              backgroundColor: AppColors.surfaceLight,
-            ),
-            const SizedBox(width: 8),
-            _DiffBadge(difficulty: currentQ.difficulty),
-          ],
-          if (currentTeam != null) ...[
-            const SizedBox(width: 8),
-            _TeamChip(team: currentTeam),
-          ],
-          // R1 double badge
-          if (session.isDoubleActive) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber),
-              ),
-              child: const Text(
-                AppStrings.doubleActivated,
-                style: TextStyle(
-                    color: Colors.amber,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12),
-                textDirection: TextDirection.rtl,
-              ),
-            ),
-          ],
+          const SizedBox(width: 10),
+          Text('Question $qNumber/$total', style: GoogleFonts.alexandria(fontSize: 13, color: AppColors.textSecondary)),
           const Spacer(),
-          Text(
-            'Q $qNumber / $total',
-            style: const TextStyle(
-                color: AppColors.textSecondary, fontSize: 14),
+          const Icon(Icons.flash_on_rounded, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          const Icon(Icons.sync_rounded, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          const Icon(Icons.wifi_rounded, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(color: AppColors.orangeBg, borderRadius: BorderRadius.circular(24)),
+            child: Text(timeStr, style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.orangeDark)),
           ),
-          const SizedBox(width: 16),
-          if (timerActive)
-            TimerWidget(
-              remaining: session.timerRemaining,
-              total: session.timerSeconds,
-            )
-          else
-            const SizedBox(width: 60),
-          const SizedBox(width: 8),
         ],
       ),
     );
   }
 }
 
-class _TeamChip extends StatelessWidget {
-  final Team team;
-  const _TeamChip({required this.team});
+// ── Right control panel ───────────────────────────────────────────────────────
+
+class _RightPanel extends StatelessWidget {
+  final GameSession session;
+  final bool showCorrectWrong;
+  final bool isPaused;
+  final bool timerActive;
+  final Question? currentQ;
+
+  const _RightPanel({
+    required this.session,
+    required this.showCorrectWrong,
+    required this.isPaused,
+    required this.timerActive,
+    this.currentQ,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(team.color);
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      width: 272,
+      color: AppColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CircleAvatar(
-              radius: 7,
-              backgroundColor: color,
-              child: Text(
-                team.name.isNotEmpty
-                    ? team.name[0].toUpperCase()
-                    : '?',
-                style: const TextStyle(
-                    fontSize: 8, color: Colors.white),
-              )),
-          const SizedBox(width: 6),
-          Text(team.name,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Buzzed team badge ─────────────────────────────────────────────────────────
-
-class _BuzzedTeamBadge extends StatelessWidget {
-  final List<Team> teams;
-  final String buzzedTeamId;
-
-  const _BuzzedTeamBadge(
-      {required this.teams, required this.buzzedTeamId});
-
-  @override
-  Widget build(BuildContext context) {
-    final team = teams.firstWhere(
-      (t) => t.id == buzzedTeamId,
-      orElse: () => teams.first,
-    );
-    final color = Color(team.color);
-    return Container(
-      width: double.infinity,
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: color.withValues(alpha: 0.2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.record_voice_over, color: color, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            team.name,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+          // ── Timer card ────────────────────────────────────
+          Container(
+            margin: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF8EC),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.orangeBg.withOpacity(0.4)),
+            ),
+            child: Column(
+              children: [
+                Text('TIME REMAINING', style: GoogleFonts.alexandria(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 1)),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: TimerWidget(
+                    remaining: session.timerRemaining,
+                    total: session.timerSeconds,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            AppStrings.buzzed,
-            style: TextStyle(
-                color: color.withValues(alpha: 0.8), fontSize: 14),
+
+          // ── Buttons ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              children: [
+                // ── Double points (R1 only) ───────────────────────
+                if (session.roundType == RoundType.classic &&
+                    session.buzzedTeamId == null &&
+                    session.currentTeam != null &&
+                    !session.doublesUsed.contains(session.currentTeam!.id) &&
+                    !session.isDoubleActive) ...[
+                  _PanelBtn(
+                    label: AppStrings.doublePoints,
+                    icon: Icons.close_fullscreen_rounded,
+                    bgColor: AppColors.orangeBg,
+                    fgColor: AppColors.orangeDark,
+                    onTap: () => context.read<GameBloc>().add(const UseDouble()),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (session.isDoubleActive) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.orangeBg.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.orangeBg),
+                    ),
+                    child: Text(
+                      AppStrings.doubleActivated,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.alexandria(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.orangeDark),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                _PanelBtn(
+                  label: 'Show Answer',
+                  icon: Icons.visibility_rounded,
+                  bgColor: AppColors.orangeDark,
+                  fgColor: Colors.white,
+                  onTap: () => context.read<GameBloc>().add(const NextQuestion()),
+                ),
+                const SizedBox(height: 8),
+                _PanelBtn(
+                  label: 'Reset Buzzer',
+                  icon: Icons.refresh_rounded,
+                  bgColor: Colors.transparent,
+                  fgColor: AppColors.textPrimary,
+                  border: AppColors.border,
+                  onTap: () => context.read<GameBloc>().add(const ResetBuzzer()),
+                  ),
+                if (showCorrectWrong) ...[
+                  const SizedBox(height: 8),
+                  _PanelBtn(
+                    label: 'Correct ✓',
+                    icon: Icons.check_circle_rounded,
+                    bgColor: AppColors.greenSuccess,
+                    fgColor: Colors.white,
+                    onTap: () => context.read<GameBloc>().add(AnswerCorrect(currentQ?.points ?? 10)),
+                  ),
+                  const SizedBox(height: 8),
+                  _PanelBtn(
+                    label: 'Incorrect ✗',
+                    icon: Icons.cancel_rounded,
+                    bgColor: AppColors.redError,
+                    fgColor: Colors.white,
+                    onTap: () => context.read<GameBloc>().add(const AnswerWrong()),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _PanelBtn(
+                  label: 'End Game',
+                  icon: Icons.stop_circle_rounded,
+                  bgColor: Colors.transparent,
+                  fgColor: AppColors.redError,
+                  border: AppColors.redError,
+                  onTap: () => context.read<GameBloc>().add(const EndGame()),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1242,7 +1457,54 @@ class _BuzzedTeamBadge extends StatelessWidget {
   }
 }
 
-// ── Second-team banner ────────────────────────────────────────────────────────
+// ── Panel button ──────────────────────────────────────────────────────────────
+
+class _PanelBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color bgColor;
+  final Color fgColor;
+  final Color? border;
+  final VoidCallback onTap;
+
+  const _PanelBtn({
+    required this.label,
+    required this.icon,
+    required this.bgColor,
+    required this.fgColor,
+    required this.onTap,
+    this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: border != null ? Border.all(color: border!) : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: fgColor),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.alexandria(fontSize: 13, fontWeight: FontWeight.w700, color: fgColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Second-team-waiting banner ────────────────────────────────────────────────
 
 class _SecondTeamBanner extends StatelessWidget {
   final GameSession session;
@@ -1250,228 +1512,21 @@ class _SecondTeamBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firstWrongTeam = session.firstWrongTeamId != null
-        ? session.teams.firstWhere(
-            (t) => t.id == session.firstWrongTeamId,
-            orElse: () => session.teams.first,
-          )
-        : null;
-
+    final second = session.teams.firstWhere(
+      (t) => t.id != session.buzzedTeamId,
+      orElse: () => session.teams.first,
+    );
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.error.withValues(alpha: 0.15),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      color: AppColors.blueContent.withValues(alpha: 0.1),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.warning_amber,
-              color: AppColors.error, size: 18),
+          const Icon(Icons.hourglass_top_rounded, size: 16, color: AppColors.blueContent),
           const SizedBox(width: 8),
-          if (firstWrongTeam != null)
-            Text(
-              '${firstWrongTeam.name} أجاب خطأ — فرصة للفريق الآخر!',
-              style: const TextStyle(
-                color: AppColors.error,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-              textDirection: TextDirection.rtl,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Difficulty badge ──────────────────────────────────────────────────────────
-
-class _DiffBadge extends StatelessWidget {
-  final DifficultyLevel difficulty;
-  const _DiffBadge({required this.difficulty});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color color;
-    final String label;
-    switch (difficulty) {
-      case DifficultyLevel.easy:
-        color = AppColors.success;
-        label = 'Easy';
-      case DifficultyLevel.hard:
-        color = AppColors.error;
-        label = 'Hard';
-      case DifficultyLevel.medium:
-        color = AppColors.accent;
-        label = 'Medium';
-    }
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-// ── Control bar ───────────────────────────────────────────────────────────────
-
-class _ControlBar extends StatelessWidget {
-  final GameSession session;
-  final bool showCorrectWrong;
-  final bool isPaused;
-  final bool timerActive;
-
-  const _ControlBar({
-    required this.session,
-    required this.showCorrectWrong,
-    required this.isPaused,
-    required this.timerActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final currentQ =
-        session.currentQuestionIndex < session.questions.length
-            ? session.questions[session.currentQuestionIndex]
-            : null;
-
-    // R1: can this team activate double?
-    final currentTeam = session.currentTeam;
-    final canDouble = session.roundType == RoundType.classic &&
-        !showCorrectWrong &&
-        currentTeam != null &&
-        !session.doublesUsed.contains(currentTeam.id) &&
-        !session.isDoubleActive;
-
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.surface,
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 10,
-        runSpacing: 8,
-        children: [
-          if (showCorrectWrong) ...[
-            ElevatedButton.icon(
-              onPressed: () => context
-                  .read<GameBloc>()
-                  .add(AnswerCorrect(currentQ?.points ?? 10)),
-              icon: const Icon(Icons.check),
-              label: const Text(AppStrings.correct),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success),
-            ),
-            ElevatedButton.icon(
-              onPressed: () =>
-                  context.read<GameBloc>().add(const AnswerWrong()),
-              icon: const Icon(Icons.close),
-              label: const Text(AppStrings.wrong),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error),
-            ),
-          ],
-          // Double-points button (R1 only)
-          if (canDouble)
-            ElevatedButton.icon(
-              onPressed: () =>
-                  context.read<GameBloc>().add(const UseDouble()),
-              icon: const Icon(Icons.close,
-                  color: Colors.black), // × icon
-              label: const Text(AppStrings.doublePoints,
-                  style: TextStyle(color: Colors.black)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber,
-                side: const BorderSide(color: Colors.orange),
-              ),
-            ),
-          ElevatedButton.icon(
-            onPressed: () =>
-                context.read<GameBloc>().add(const NextQuestion()),
-            icon: const Icon(Icons.skip_next),
-            label: const Text(AppStrings.nextQuestion),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
-            ),
-          ),
-          if (timerActive)
-            ElevatedButton.icon(
-              onPressed: () => context.read<GameBloc>().add(
-                    isPaused
-                        ? const ResumeTimer()
-                        : const PauseTimer(),
-                  ),
-              icon: Icon(
-                  isPaused ? Icons.play_arrow : Icons.pause),
-              label: Text(isPaused
-                  ? AppStrings.resumeGame
-                  : AppStrings.pauseGame),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.surfaceLight),
-            ),
-          if (isPaused)
-            ElevatedButton.icon(
-              onPressed: () =>
-                  context.read<GameBloc>().add(const ResumeTimer()),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text(AppStrings.resumeGame),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.surfaceLight),
-            ),
-          // Reset buzzer
-          ElevatedButton.icon(
-            onPressed: () =>
-                context.read<GameBloc>().add(const ResetBuzzer()),
-            icon: const Icon(Icons.refresh),
-            label: const Text(AppStrings.resetBuzzer),
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  AppColors.accent.withValues(alpha: 0.85),
-              foregroundColor: Colors.black,
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => _confirmEnd(context),
-            icon: const Icon(Icons.stop),
-            label: const Text(AppStrings.endGame),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmEnd(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(AppStrings.endGame),
-        content: const Text(AppStrings.confirmEndGame),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text(AppStrings.cancel)),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error),
-            onPressed: () {
-              context.read<GameBloc>().add(const EndGame());
-              Navigator.pop(ctx);
-            },
-            child: const Text(AppStrings.confirm),
+          Text(
+            '${second.name} is waiting to answer',
+            style: GoogleFonts.alexandria(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.blueContent),
           ),
         ],
       ),

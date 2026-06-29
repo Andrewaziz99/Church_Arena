@@ -10,8 +10,7 @@ extension ContextExtensions on BuildContext {
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? const Color(0xFFFF3B6B) : const Color(0xFF00FF88),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
+        behavior: SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 3),
       ),

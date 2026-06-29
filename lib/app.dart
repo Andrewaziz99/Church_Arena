@@ -25,7 +25,7 @@ class App extends StatelessWidget {
       child: MaterialApp.router(
         title: 'Church Arena',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.lightTheme,
         routerConfig: appRouter,
       ),
     );

@@ -1,41 +1,68 @@
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:injectable/injectable.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/utils/app_logger.dart';
 
 @lazySingleton
 class AudioService {
-  final AudioPlayer _player = AudioPlayer();
+  // Lazy map — players are created on first use, not at field-init time.
+  // Creating all players up-front before the plugin DLL is fully initialised
+  // can trigger _CrtIsValidHeapPointer heap-mismatch crashes on Windows.
+  final Map<String, AudioPlayer> _players = {};
+
   double _volume = 0.8;
 
   Future<void> initialize() async {
-    await setVolume(_volume);
-  }
-
-  Future<void> setVolume(double volume) async {
-    _volume = volume;
-    await _player.setVolume(volume);
-  }
-
-  /// audioplayers AssetSource uses the path relative to the assets/ folder,
-  /// so 'assets/audio/buzzer.mp3' becomes AssetSource('audio/buzzer.mp3').
-  Future<void> _play(String assetPath) async {
     try {
-      await _player.stop();
-      await _player.play(AssetSource(assetPath.replaceFirst('assets/', '')));
+      // AudioContext (mobile audio session config) is not needed on Windows/Desktop.
+      // Calling it on Windows can cause premature plugin DLL initialisation and
+      // subsequent heap-corruption crashes in debug builds.
+      if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
+        await AudioPlayer.global.setAudioContext(AudioContext());
+      }
+      AppLogger.i('AudioService: initialized');
     } catch (e) {
-      AppLogger.e('AudioService error: $e');
+      AppLogger.e('AudioService: initialize error: $e');
     }
   }
 
-  Future<void> playBuzzer()    => _play(AppConstants.buzzerSoundPath);
-  Future<void> playCorrect()   => _play(AppConstants.correctSoundPath);
-  Future<void> playWrong()     => _play(AppConstants.wrongSoundPath);
-  Future<void> playTick()      => _play(AppConstants.tickSoundPath);
-  Future<void> playVictory()   => _play(AppConstants.victoryFanfarePath);
-  Future<void> playCountdown() => _play(AppConstants.countdownSoundPath);
-  Future<void> stopAll()       async => _player.stop();
+  Future<void> setVolume(double volume) async {
+    _volume = volume.clamp(0.0, 1.0);
+    for (final p in _players.values) {
+      await p.setVolume(_volume);
+    }
+  }
+
+  Future<void> playBuzzer()    => _play('buzzer',    'audio/buzzer.mp3');
+  Future<void> playCorrect()   => _play('correct',   'audio/correct.mp3');
+  Future<void> playWrong()     => _play('wrong',     'audio/wrong.mp3');
+  Future<void> playTick()      => _play('tick',      'audio/tick.mp3');
+  Future<void> playVictory()   => _play('victory',   'audio/victory.mp3');
+  Future<void> playCountdown() => _play('countdown', 'audio/countdown.mp3');
+
+  Future<void> stopAll() async {
+    for (final p in _players.values) {
+      try { await p.stop(); } catch (_) {}
+    }
+  }
+
+  Future<void> _play(String key, String assetPath) async {
+    try {
+      final player = _players.putIfAbsent(key, () => AudioPlayer());
+      await player.stop();
+      await player.setVolume(_volume);
+      await player.play(AssetSource(assetPath));
+    } catch (e) {
+      AppLogger.e('AudioService: play($assetPath) error: $e');
+    }
+  }
 
   @disposeMethod
-  void dispose() => _player.dispose();
+  void dispose() {
+    for (final p in _players.values) {
+      try { p.dispose(); } catch (_) {}
+    }
+    _players.clear();
+    AppLogger.i('AudioService: disposed');
+  }
 }

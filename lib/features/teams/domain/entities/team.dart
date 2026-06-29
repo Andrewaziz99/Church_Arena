@@ -9,6 +9,8 @@ class Team extends Equatable {
   final bool isActive;
   /// Competition section this team belongs to, e.g. 'اولى وثانية'. Empty = all.
   final String section;
+  /// List of team member names.
+  final List<String> members;
 
   const Team({
     required this.id,
@@ -18,6 +20,7 @@ class Team extends Equatable {
     this.logoPath,
     this.isActive = false,
     this.section = '',
+    this.members = const [],
   });
 
   Team copyWith({
@@ -28,6 +31,7 @@ class Team extends Equatable {
     Object? logoPath = _sentinel,
     bool? isActive,
     String? section,
+    List<String>? members,
   }) {
     return Team(
       id: id ?? this.id,
@@ -37,11 +41,12 @@ class Team extends Equatable {
       logoPath: logoPath == _sentinel ? this.logoPath : logoPath as String?,
       isActive: isActive ?? this.isActive,
       section: section ?? this.section,
+      members: members ?? this.members,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, color, score, logoPath, isActive, section];
+  List<Object?> get props => [id, name, color, score, logoPath, isActive, section, members];
 }
 
 const _sentinel = Object();

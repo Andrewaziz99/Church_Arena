@@ -154,6 +154,7 @@ class _CategoryPanel extends StatelessWidget {
     final nameCtrl = TextEditingController();
     int selectedColor = AppColors.primary.value;
     String selectedSection = '';
+    String selectedRoundType = '';
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -182,19 +183,50 @@ class _CategoryPanel extends StatelessWidget {
                     const DropdownMenuItem(
                       value: null,
                       child: Text(AppStrings.allSections,
-                          style:
-                              TextStyle(color: AppColors.textSecondary)),
+                          style: TextStyle(color: AppColors.textSecondary)),
                     ),
                     ...AppStrings.sections.map((s) => DropdownMenuItem(
                           value: s,
                           child: Text(s,
                               textDirection: TextDirection.rtl,
-                              style: const TextStyle(
-                                  color: AppColors.textPrimary)),
+                              style: const TextStyle(color: AppColors.textPrimary)),
                         )),
                   ],
-                  onChanged: (v) =>
-                      setState(() => selectedSection = v ?? ''),
+                  onChanged: (v) => setState(() => selectedSection = v ?? ''),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedRoundType.isEmpty ? null : selectedRoundType,
+                  decoration: const InputDecoration(
+                    labelText: 'الفقرة',
+                    hintText: 'لكل الفقرات',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: null,
+                      child: Text('لكل الفقرات',
+                          style: TextStyle(color: AppColors.textSecondary)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'r1',
+                      child: Text('الفقرة الأولى — أسئلة الفرق',
+                          textDirection: TextDirection.rtl,
+                          style: TextStyle(color: AppColors.textPrimary)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'r2',
+                      child: Text('الفقرة الثانية — ضربات جزاء',
+                          textDirection: TextDirection.rtl,
+                          style: TextStyle(color: AppColors.textPrimary)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'r3',
+                      child: Text('الفقرة الثالثة — تحت الضغط',
+                          textDirection: TextDirection.rtl,
+                          style: TextStyle(color: AppColors.textPrimary)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => selectedRoundType = v ?? ''),
                 ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -202,8 +234,7 @@ class _CategoryPanel extends StatelessWidget {
                   children: AppColors.teamColors.map((color) {
                     final isSelected = selectedColor == color.value;
                     return GestureDetector(
-                      onTap: () =>
-                          setState(() => selectedColor = color.value),
+                      onTap: () => setState(() => selectedColor = color.value),
                       child: Container(
                         width: 32,
                         height: 32,
@@ -235,6 +266,7 @@ class _CategoryPanel extends StatelessWidget {
                         name: nameCtrl.text.trim(),
                         color: selectedColor,
                         section: selectedSection,
+                        roundType: selectedRoundType,
                       )),
                     );
                 Navigator.pop(ctx);
@@ -341,8 +373,8 @@ class _AddQuestionButton extends StatelessWidget {
           ),
           backgroundColor: AppColors.accent,
           foregroundColor: AppColors.background,
-          icon: const Icon(Icons.add),
-          label: const Text(AppStrings.addQuestion),
+          icon: const Icon(Icons.add,color: Colors.black,),
+          label: const Text(AppStrings.addQuestion, style: TextStyle(color: Colors.black),),
         ),
       ),
     );

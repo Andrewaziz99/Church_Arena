@@ -525,7 +525,9 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
   Future<void> _onResetBuzzer(
       ResetBuzzer event, Emitter<GameState> emit) async {
-    arduinoService.sendResetSignal();
+    // resetBuzzers() sends 'R' over serial AND clears the software lock,
+    // so the next physical press from the Arduino is registered.
+    arduinoService.resetBuzzers();
   }
 
   // ── Answers ───────────────────────────────────────────────────────────────

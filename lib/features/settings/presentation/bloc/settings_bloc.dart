@@ -34,7 +34,13 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     final result = await getSettings();
     result.fold(
       (failure) => emit(SettingsError(failure.message)),
-      (settings) => emit(SettingsLoaded(settings)),
+      (settings) {
+        emit(SettingsLoaded(settings));
+        // Auto-connect to Arduino using saved COM port on startup.
+        if (settings.comPort.isNotEmpty && !arduinoService.isConnected) {
+          arduinoService.connect(settings.comPort, settings.baudRate);
+        }
+      },
     );
   }
 
@@ -45,7 +51,19 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     final result = await saveSettings(event.settings);
     result.fold(
       (failure) => emit(SettingsError(failure.message)),
-      (_) => emit(SettingsLoaded(event.settings)),
+      (_) {
+        emit(SettingsLoaded(event.settings));
+        // Reconnect if COM port or baud rate changed.
+        final prev = state is SettingsLoaded
+            ? (state as SettingsLoaded).settings
+            : null;
+        final portChanged = prev == null ||
+            prev.comPort != event.settings.comPort ||
+            prev.baudRate != event.settings.baudRate;
+        if (portChanged && event.settings.comPort.isNotEmpty) {
+          arduinoService.connect(event.settings.comPort, event.settings.baudRate);
+        }
+      },
     );
   }
 

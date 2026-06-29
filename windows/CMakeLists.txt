@@ -29,8 +29,23 @@ set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")
 set(CMAKE_C_FLAGS_PROFILE "${CMAKE_C_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 
+# Workaround: VS 2022+ (VS 17/18) detects a parallel build conflict between
+# flutter_assemble.rule and flutter_windows.dll.rule. Disabling UseMultiToolTask
+# forces sequential tool-task execution and resolves "cannot be built in parallel".
+set(CMAKE_VS_GLOBALS "UseMultiToolTask=false")
+
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
+
+# Suppress MSVC error for deprecated <experimental/coroutine> used by
+# audioplayers_windows on VS 2022 v17+ / VS 2025 v18+.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
+# Force all targets (runner + every plugin DLL) to use the same DLL CRT.
+# Without this, the runner can use /MD while a plugin uses /MT, giving each
+# a separate heap — causing _CrtIsValidHeapPointer assertion failures when
+# the plugin frees memory that the runner allocated (or vice-versa).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
 
 # Compilation settings that should be applied to most targets.
 #
