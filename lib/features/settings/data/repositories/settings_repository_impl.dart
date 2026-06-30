@@ -14,6 +14,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const String _timerKey       = 'settings_timer_duration';
   static const String _teamsKey       = 'settings_number_of_teams';
   static const String _fullscreenKey  = 'settings_fullscreen';
+  static const String _roomIdKey      = 'settings_room_id';
 
   @override
   Future<Either<Failure, AppSettings>> getSettings() async {
@@ -26,6 +27,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
         timerDuration: prefs.getInt(_timerKey) ?? 30,
         numberOfTeams: prefs.getInt(_teamsKey) ?? 2,
         isFullscreen:  prefs.getBool(_fullscreenKey) ?? false,
+        roomId:        prefs.getString(_roomIdKey) ?? 'room1',
       );
       return Right(settings);
     } catch (e) {
@@ -44,6 +46,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       await prefs.setInt(_timerKey, settings.timerDuration);
       await prefs.setInt(_teamsKey, settings.numberOfTeams);
       await prefs.setBool(_fullscreenKey, settings.isFullscreen);
+      await prefs.setString(_roomIdKey, settings.roomId);
       return const Right(unit);
     } catch (e) {
       AppLogger.e('SettingsRepository.saveSettings: $e');

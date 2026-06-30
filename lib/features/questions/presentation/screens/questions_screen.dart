@@ -12,8 +12,20 @@ import '../bloc/questions_bloc.dart';
 import '../widgets/question_card_widget.dart';
 import '../widgets/question_form_dialog.dart';
 
-class QuestionsScreen extends StatelessWidget {
+class QuestionsScreen extends StatefulWidget {
   const QuestionsScreen({super.key});
+
+  @override
+  State<QuestionsScreen> createState() => _QuestionsScreenState();
+}
+
+class _QuestionsScreenState extends State<QuestionsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Real-time updates are handled by RemoteSyncBus → QuestionsBloc.
+    // No polling timer needed.
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +40,15 @@ class QuestionsScreen extends StatelessWidget {
             label: const Text(
               AppStrings.importQuestions,
               style: TextStyle(color: AppColors.primary),
+            ),
+          ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            onPressed: () => _confirmClearAll(context),
+            icon: const Icon(Icons.delete_sweep_rounded, color: AppColors.error),
+            label: const Text(
+              'Clear All',
+              style: TextStyle(color: AppColors.error),
             ),
           ),
           const SizedBox(width: 8),
@@ -83,6 +104,32 @@ class QuestionsScreen extends StatelessWidget {
     );
     if (result != null && result.files.single.path != null && context.mounted) {
       context.read<QuestionsBloc>().add(ImportQuestions(result.files.single.path!));
+    }
+  }
+
+  Future<void> _confirmClearAll(BuildContext context) async {
+    final bloc = context.read<QuestionsBloc>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all questions?'),
+        content: const Text(
+            'This will permanently delete every question in the database. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(AppStrings.cancel),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      bloc.add(const ClearAllQuestions());
     }
   }
 }

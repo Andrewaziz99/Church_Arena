@@ -91,6 +91,25 @@ class GamePressureQuestion extends GameState {
   List<Object> get props => [session];
 }
 
+/// Showing the correct answer highlighted for ~2 seconds, then auto-advancing.
+/// Emitted after a correct answer (R1/R2) or after "Reveal Answer" (both-wrong).
+class GameShowingAnswer extends GameState {
+  final GameSession session;
+  final Question question;
+  const GameShowingAnswer(this.session, this.question);
+  @override
+  List<Object?> get props => [session, question];
+}
+
+/// Both teams answered wrong — controller can reveal the answer or skip.
+class GameBothWrong extends GameState {
+  final GameSession session;
+  final Question question;
+  const GameBothWrong(this.session, this.question);
+  @override
+  List<Object?> get props => [session, question];
+}
+
 // ── Terminal states ───────────────────────────────────────────────────────────
 
 class GameEnded extends GameState {

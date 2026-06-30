@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
+import '../../../../services/sync/remote_sync_bus.dart';
 import '../../domain/entities/category.dart';
 import '../../domain/entities/question.dart';
+import '../../domain/usecases/clear_all_questions_usecase.dart';
 import '../../domain/usecases/delete_question_usecase.dart';
 import '../../domain/usecases/get_categories_usecase.dart';
 import '../../domain/usecases/get_questions_usecase.dart';
@@ -21,6 +24,10 @@ class QuestionsBloc extends Bloc<QuestionsEvent, QuestionsState> {
   final ImportQuestionsUseCase importQuestions;
   final GetCategoriesUseCase getCategories;
   final SaveCategoryUseCase saveCategory;
+  final ClearAllQuestionsUseCase clearAllQuestions;
+
+  StreamSubscription<String>? _remoteSub;
+  Timer? _debounceTimer;
 
   QuestionsBloc({
     required this.getQuestions,
@@ -29,8 +36,10 @@ class QuestionsBloc extends Bloc<QuestionsEvent, QuestionsState> {
     required this.importQuestions,
     required this.getCategories,
     required this.saveCategory,
+    required this.clearAllQuestions,
   }) : super(const QuestionsInitial()) {
     on<LoadQuestions>(_onLoadQuestions);
+    on<_RemoteRefreshQuestions>(_onRemoteRefreshQuestions);
     on<LoadCategories>(_onLoadCategories);
     on<SaveQuestion>(_onSaveQuestion);
     on<DeleteQuestion>(_onDeleteQuestion);
@@ -38,6 +47,25 @@ class QuestionsBloc extends Bloc<QuestionsEvent, QuestionsState> {
     on<FilterByCategory>(_onFilterByCategory);
     on<FilterByDifficulty>(_onFilterByDifficulty);
     on<SaveCategory>(_onSaveCategory);
+    on<ClearAllQuestions>(_onClearAllQuestions);
+
+    // Silent background refresh when a remote Supabase change arrives.
+    // Debounced 800 ms so burst realtime events collapse into one reload.
+    _remoteSub = RemoteSyncBus.instance.stream.listen((table) {
+      if (table == 'questions') {
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(const Duration(milliseconds: 800), () {
+          if (!isClosed) add(const _RemoteRefreshQuestions());
+        });
+      }
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _debounceTimer?.cancel();
+    _remoteSub?.cancel();
+    return super.close();
   }
 
   Future<void> _onLoadQuestions(
@@ -54,6 +82,32 @@ class QuestionsBloc extends Bloc<QuestionsEvent, QuestionsState> {
         (categories) => emit(
           QuestionsLoaded(questions: questions, categories: categories),
         ),
+      ),
+    );
+  }
+
+  /// Silent background refresh — no loading spinner, preserves current filters.
+  Future<void> _onRemoteRefreshQuestions(
+    _RemoteRefreshQuestions event,
+    Emitter<QuestionsState> emit,
+  ) async {
+    final questionsResult = await getQuestions();
+    final categoriesResult = await getCategories();
+    questionsResult.fold(
+      (failure) => null, // silently ignore errors on background refresh
+      (questions) => categoriesResult.fold(
+        (failure) => null,
+        (categories) {
+          if (state is QuestionsLoaded) {
+            final current = state as QuestionsLoaded;
+            emit(current.copyWith(
+              questions: questions,
+              categories: categories,
+            ));
+          } else {
+            emit(QuestionsLoaded(questions: questions, categories: categories));
+          }
+        },
       ),
     );
   }
@@ -133,6 +187,17 @@ class QuestionsBloc extends Bloc<QuestionsEvent, QuestionsState> {
     Emitter<QuestionsState> emit,
   ) async {
     final result = await saveCategory(event.category);
+    result.fold(
+      (failure) => emit(QuestionsError(failure.message)),
+      (_) => add(const LoadQuestions()),
+    );
+  }
+
+  Future<void> _onClearAllQuestions(
+    ClearAllQuestions event,
+    Emitter<QuestionsState> emit,
+  ) async {
+    final result = await clearAllQuestions();
     result.fold(
       (failure) => emit(QuestionsError(failure.message)),
       (_) => add(const LoadQuestions()),

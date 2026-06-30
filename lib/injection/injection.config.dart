@@ -26,6 +26,7 @@ import '../features/questions/domain/usecases/delete_question_usecase.dart';
 import '../features/questions/domain/usecases/import_questions_usecase.dart';
 import '../features/questions/domain/usecases/get_categories_usecase.dart';
 import '../features/questions/domain/usecases/save_category_usecase.dart';
+import '../features/questions/domain/usecases/clear_all_questions_usecase.dart';
 import '../features/questions/presentation/bloc/questions_bloc.dart';
 
 // ── Game ───────────────────────────────────────────────────────────────────────
@@ -127,6 +128,10 @@ void $initGetIt(GetIt g) {
     g.registerLazySingleton<SaveCategoryUseCase>(
         () => SaveCategoryUseCase(g<QuestionRepository>()));
   }
+  if (!g.isRegistered<ClearAllQuestionsUseCase>()) {
+    g.registerLazySingleton<ClearAllQuestionsUseCase>(
+        () => ClearAllQuestionsUseCase(g<QuestionRepository>()));
+  }
   if (!g.isRegistered<QuestionsBloc>()) {
     g.registerFactory<QuestionsBloc>(() => QuestionsBloc(
           getQuestions: g<GetQuestionsUseCase>(),
@@ -135,6 +140,7 @@ void $initGetIt(GetIt g) {
           importQuestions: g<ImportQuestionsUseCase>(),
           getCategories: g<GetCategoriesUseCase>(),
           saveCategory: g<SaveCategoryUseCase>(),
+          clearAllQuestions: g<ClearAllQuestionsUseCase>(),
         ));
   }
 

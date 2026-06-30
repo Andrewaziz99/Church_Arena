@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -16,118 +18,175 @@ import '../widgets/question_display_widget.dart';
 import '../widgets/team_scores_bar.dart';
 import '../widgets/timer_widget.dart';
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
 
   @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  bool _redFlashVisible = false;
+  Timer? _flashTimer;
+
+  void _triggerRedFlash() {
+    if (!mounted) return;
+    setState(() => _redFlashVisible = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _redFlashVisible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        final bloc = context.read<GameBloc>();
-        final s = bloc.state;
-        if (s is GameIdle || s is GameEnded) {
-          if (context.mounted) context.pop();
-          return;
-        }
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text(AppStrings.endGame),
-            content: const Text(AppStrings.confirmEndGame),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text(AppStrings.cancel),
+    return Stack(
+      children: [
+        PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final bloc = context.read<GameBloc>();
+            final s = bloc.state;
+            if (s is GameIdle || s is GameEnded) {
+              if (context.mounted) context.pop();
+              return;
+            }
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text(AppStrings.endGame),
+                content: const Text(AppStrings.confirmEndGame),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text(AppStrings.cancel),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(AppStrings.confirm),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.error),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(AppStrings.confirm),
-              ),
-            ],
+            );
+            if (confirmed == true && context.mounted) {
+              context.read<GameBloc>().add(const EndGame());
+            }
+          },
+          child: BlocConsumer<GameBloc, GameState>(
+            listener: (context, state) {
+              if (state is GameError) {
+                context.showSnackBar(state.message, isError: true);
+              }
+              if (state is GameEnded) {
+                context.read<ScoreboardBloc>().add(LoadScoreboard(state.teams));
+                context.go('/scoreboard');
+              }
+              // Red flash on wrong answer
+              if (state is GameWaitingSecondTeam || state is GameBothWrong) {
+                _triggerRedFlash();
+              }
+            },
+            builder: (context, state) {
+              if (state is GameIdle) return _IdleScreen();
+              if (state is GameLoading) {
+                return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()));
+              }
+
+              // ── Answer feedback screens ──────────────────────────────────
+              if (state is GameShowingAnswer) {
+                return _AnswerRevealedScreen(
+                  session: state.session,
+                  question: state.question,
+                );
+              }
+              if (state is GameBothWrong) {
+                return _BothWrongScreen(
+                  session: state.session,
+                  question: state.question,
+                );
+              }
+
+              // ── 3-round special screens ──────────────────────────────────
+              if (state is GameTeamTurn) {
+                return _TeamTurnScreen(session: state.session);
+              }
+              if (state is GamePairDisplay) {
+                return _PairDisplayScreen(session: state.session);
+              }
+              if (state is GameRoundTransition) {
+                return _RoundTransitionScreen(
+                  teams: state.teams,
+                  completedRound: state.completedRound,
+                );
+              }
+              if (state is GamePressureQuestion) {
+                return _PressureQuestionScreen(session: state.session);
+              }
+
+              // ── Standard game layout ─────────────────────────────────────
+              if (state is GameWaitingBuzz) {
+                return _GameLayout(
+                  session: state.session,
+                  timerActive: false,
+                  showCorrectWrong: false,
+                );
+              }
+              if (state is GameBuzzedDisplay) {
+                return _BuzzedDisplayScreen(
+                  session: state.session,
+                  secondsLeft: state.secondsLeft,
+                );
+              }
+              if (state is GameInProgress) {
+                return _GameLayout(
+                  session: state.session,
+                  timerActive: true,
+                  showCorrectWrong: state.session.buzzedTeamId != null,
+                );
+              }
+              if (state is GameWaitingSecondTeam) {
+                return _GameLayout(
+                  session: state.session,
+                  timerActive: false,
+                  showCorrectWrong: false,
+                  isSecondTeamWaiting: true,
+                );
+              }
+              if (state is GamePaused) {
+                return _GameLayout(
+                  session: state.session,
+                  timerActive: false,
+                  showCorrectWrong: false,
+                  isPaused: true,
+                );
+              }
+              return _IdleScreen();
+            },
           ),
-        );
-        if (confirmed == true && context.mounted) {
-          context.read<GameBloc>().add(const EndGame());
-        }
-      },
-      child: BlocConsumer<GameBloc, GameState>(
-        listener: (context, state) {
-          if (state is GameError) {
-            context.showSnackBar(state.message, isError: true);
-          }
-          if (state is GameEnded) {
-            context.read<ScoreboardBloc>().add(LoadScoreboard(state.teams));
-            context.go('/scoreboard');
-          }
-        },
-        builder: (context, state) {
-          if (state is GameIdle) return _IdleScreen();
-          if (state is GameLoading) {
-            return const Scaffold(
-                body: Center(child: CircularProgressIndicator()));
-          }
+        ),
 
-          // ── 3-round special screens ──────────────────────────────────────
-          if (state is GameTeamTurn) {
-            return _TeamTurnScreen(session: state.session);
-          }
-          if (state is GamePairDisplay) {
-            return _PairDisplayScreen(session: state.session);
-          }
-          if (state is GameRoundTransition) {
-            return _RoundTransitionScreen(
-              teams: state.teams,
-              completedRound: state.completedRound,
-            );
-          }
-          if (state is GamePressureQuestion) {
-            return _PressureQuestionScreen(session: state.session);
-          }
-
-          // ── Standard game layout ─────────────────────────────────────────
-          if (state is GameWaitingBuzz) {
-            return _GameLayout(
-              session: state.session,
-              timerActive: false,
-              showCorrectWrong: false,
-            );
-          }
-          if (state is GameBuzzedDisplay) {
-            return _BuzzedDisplayScreen(
-              session: state.session,
-              secondsLeft: state.secondsLeft,
-            );
-          }
-          if (state is GameInProgress) {
-            return _GameLayout(
-              session: state.session,
-              timerActive: true,
-              showCorrectWrong: state.session.buzzedTeamId != null,
-            );
-          }
-          if (state is GameWaitingSecondTeam) {
-            return _GameLayout(
-              session: state.session,
-              timerActive: false,
-              showCorrectWrong: false,
-              isSecondTeamWaiting: true,
-            );
-          }
-          if (state is GamePaused) {
-            return _GameLayout(
-              session: state.session,
-              timerActive: false,
-              showCorrectWrong: false,
-              isPaused: true,
-            );
-          }
-          return _IdleScreen();
-        },
-      ),
+        // ── Red flash overlay ────────────────────────────────────────────────
+        if (_redFlashVisible)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _redFlashVisible ? 0.55 : 0.0,
+                duration: const Duration(milliseconds: 150),
+                child: Container(color: Colors.red),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1153,8 +1212,15 @@ class _QuestionCard extends StatelessWidget {
   final Question question;
   final String? buzzedTeamId;
   final List<Team> teams;
+  /// When true, highlight the correct answer in green.
+  final bool showCorrectAnswer;
 
-  const _QuestionCard({required this.question, this.buzzedTeamId, required this.teams});
+  const _QuestionCard({
+    required this.question,
+    this.buzzedTeamId,
+    required this.teams,
+    this.showCorrectAnswer = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1196,6 +1262,32 @@ class _QuestionCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    // ── Image question media ───────────────────────────
+                    if (question.type == QuestionType.image &&
+                        question.mediaPath != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(
+                          File(question.mediaPath!),
+                          width: double.infinity,
+                          height: 280,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.broken_image_rounded,
+                                  size: 40, color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                    // ── Question text ─────────────────────────────────
                     Text(
                       question.text,
                       textAlign: TextAlign.center,
@@ -1218,34 +1310,52 @@ class _QuestionCard extends StatelessWidget {
                         itemBuilder: (_, i) {
                           const letters = ['A', 'B', 'C', 'D'];
                           const colors = [Color(0xFF1565C0), Color(0xFF2E7D32), Color(0xFF6A1B9A), Color(0xFFE65100)];
-                          final c = colors[i % colors.length];
-                          return Container(
+                          final optionText = question.options[i];
+                          final isCorrect = showCorrectAnswer &&
+                              question.correctAnswer != null &&
+                              optionText.trim().toLowerCase() ==
+                                  question.correctAnswer!.trim().toLowerCase();
+                          final c = isCorrect ? const Color(0xFF1B5E20) : colors[i % colors.length];
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
                             decoration: BoxDecoration(
-                              color: c.withOpacity(0.12),
+                              color: isCorrect ? const Color(0xFF1B5E20).withOpacity(0.18) : c.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: c.withOpacity(0.45), width: 1.5),
+                              border: Border.all(
+                                color: isCorrect ? const Color(0xFF43A047) : c.withOpacity(0.45),
+                                width: isCorrect ? 2.5 : 1.5,
+                              ),
+                              boxShadow: isCorrect
+                                  ? [BoxShadow(color: const Color(0xFF43A047).withOpacity(0.4), blurRadius: 12, spreadRadius: 1)]
+                                  : null,
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   width: 42,
                                   decoration: BoxDecoration(
-                                    color: c.withOpacity(0.35),
+                                    color: isCorrect ? const Color(0xFF43A047) : c.withOpacity(0.35),
                                     borderRadius: const BorderRadius.only(
                                       topLeft: Radius.circular(11),
                                       bottomLeft: Radius.circular(11),
                                     ),
                                   ),
                                   child: Center(
-                                    child: Text(letters[i], style: GoogleFonts.alexandria(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                                    child: isCorrect
+                                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                                        : Text(letters[i], style: GoogleFonts.alexandria(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
                                   ),
                                 ),
                                 Expanded(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 10),
                                     child: Text(
-                                      question.options[i],
-                                      style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                      optionText,
+                                      style: GoogleFonts.alexandria(
+                                        fontSize: 14,
+                                        fontWeight: isCorrect ? FontWeight.w800 : FontWeight.w600,
+                                        color: isCorrect ? const Color(0xFF1B5E20) : AppColors.textPrimary,
+                                      ),
                                       textAlign: TextAlign.center,
                                       textDirection: TextDirection.rtl,
                                       maxLines: 2,
@@ -1259,12 +1369,248 @@ class _QuestionCard extends StatelessWidget {
                         },
                       ),
                     ],
+                    // ── Correct-answer banner for text answers ─────
+                    if (showCorrectAnswer &&
+                        question.correctAnswer != null &&
+                        question.correctAnswer!.isNotEmpty &&
+                        question.options.isEmpty) ...[
+                      const SizedBox(height: 24),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1B5E20).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF43A047), width: 2),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.check_circle_rounded, color: Color(0xFF43A047), size: 18),
+                                const SizedBox(width: 6),
+                                Text('CORRECT ANSWER', style: GoogleFonts.alexandria(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF43A047), letterSpacing: 1)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              question.correctAnswer!,
+                              textAlign: TextAlign.center,
+                              textDirection: TextDirection.rtl,
+                              style: GoogleFonts.alexandria(fontSize: 22, fontWeight: FontWeight.w800, color: const Color(0xFF1B5E20)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Answer revealed screen (correct answer highlighted) ───────────────────────
+
+class _AnswerRevealedScreen extends StatelessWidget {
+  final GameSession session;
+  final Question question;
+
+  const _AnswerRevealedScreen({required this.session, required this.question});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F0E8),
+      body: Row(
+        children: [
+          const AppNavSidebar(activeRoute: '/game'),
+          Expanded(
+            child: Column(
+              children: [
+                // Header banner
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1B5E20),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        'CORRECT ANSWER',
+                        style: GoogleFonts.alexandria(
+                          fontSize: 16, fontWeight: FontWeight.w800,
+                          color: Colors.white, letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: _QuestionCard(
+                      question: question,
+                      teams: session.teams,
+                      showCorrectAnswer: true,
+                    ),
+                  ),
+                ),
+                // Auto-advance indicator + skip button
+                Container(
+                  color: AppColors.surface,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.blueContent),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Next question in 2 seconds...',
+                        style: GoogleFonts.alexandria(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => context.read<GameBloc>().add(const AnswerRevealTick()),
+                        icon: const Icon(Icons.skip_next_rounded, size: 18),
+                        label: const Text('Skip'),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.blueContent),
+                      ),
+                    ],
+                  ),
+                ),
+                TeamScoresBar(teams: session.teams),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Both-wrong screen (controller decides) ────────────────────────────────────
+
+class _BothWrongScreen extends StatelessWidget {
+  final GameSession session;
+  final Question question;
+
+  const _BothWrongScreen({required this.session, required this.question});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAnswer = (question.correctAnswer != null && question.correctAnswer!.isNotEmpty) ||
+        question.options.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F0E8),
+      body: Row(
+        children: [
+          const AppNavSidebar(activeRoute: '/game'),
+          Expanded(
+            child: Column(
+              children: [
+                // Header banner
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(color: AppColors.redError.withOpacity(0.85)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.cancel_rounded, color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        'BOTH TEAMS ANSWERED WRONG',
+                        style: GoogleFonts.alexandria(
+                          fontSize: 15, fontWeight: FontWeight.w800,
+                          color: Colors.white, letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: _QuestionCard(
+                      question: question,
+                      teams: session.teams,
+                      showCorrectAnswer: false,
+                    ),
+                  ),
+                ),
+                // Control buttons
+                Container(
+                  color: AppColors.surface,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  child: Row(
+                    children: [
+                      if (hasAnswer) ...[
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => context.read<GameBloc>().add(const RevealAnswer()),
+                            icon: const Icon(Icons.visibility_rounded),
+                            label: Text(
+                              'Show Answer',
+                              style: GoogleFonts.alexandria(fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1B5E20),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => context.read<GameBloc>().add(const SkipAfterBothWrong()),
+                          icon: const Icon(Icons.skip_next_rounded),
+                          label: Text(
+                            'Next Question',
+                            style: GoogleFonts.alexandria(fontWeight: FontWeight.w700),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.blueContent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => context.read<GameBloc>().add(const EndGame()),
+                        icon: const Icon(Icons.stop_circle_rounded, color: AppColors.redError),
+                        label: Text('End', style: GoogleFonts.alexandria(color: AppColors.redError, fontWeight: FontWeight.w700)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.redError),
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TeamScoresBar(teams: session.teams),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

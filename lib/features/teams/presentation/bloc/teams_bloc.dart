@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
+import '../../../../services/sync/remote_sync_bus.dart';
 import '../../domain/entities/team.dart';
 import '../../domain/usecases/get_teams_usecase.dart';
 import '../../domain/usecases/save_team_usecase.dart';
@@ -19,6 +21,8 @@ class TeamsBloc extends Bloc<TeamsEvent, TeamsState> {
   final UpdateScoreUseCase updateScore;
   final ResetScoreUseCase resetScore;
 
+  StreamSubscription<String>? _remoteSub;
+
   TeamsBloc({
     required this.getTeams,
     required this.saveTeam,
@@ -32,6 +36,17 @@ class TeamsBloc extends Bloc<TeamsEvent, TeamsState> {
     on<UpdateScore>(_onUpdateScore);
     on<ResetScore>(_onResetScore);
     on<ResetAllScores>(_onResetAllScores);
+
+    // Reload when a remote Supabase change is merged into local SQLite.
+    _remoteSub = RemoteSyncBus.instance.stream.listen((table) {
+      if (table == 'teams') add(const LoadTeams());
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _remoteSub?.cancel();
+    return super.close();
   }
 
   Future<void> _onLoadTeams(LoadTeams event, Emitter<TeamsState> emit) async {

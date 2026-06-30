@@ -65,3 +65,38 @@ CREATE POLICY "allow_all_teams"           ON teams           FOR ALL USING (true
 CREATE POLICY "allow_all_game_sessions"   ON game_sessions   FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all_game_events"     ON game_events     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all_score_snapshots" ON score_snapshots FOR ALL USING (true) WITH CHECK (true);
+
+-- ── Categories ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS categories (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  color        INTEGER NOT NULL DEFAULT 0,
+  question_ids TEXT NOT NULL DEFAULT '',   -- ';'-separated IDs
+  section      TEXT NOT NULL DEFAULT '',
+  round_type   TEXT NOT NULL DEFAULT '',
+  updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all_categories" ON categories FOR ALL USING (true) WITH CHECK (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE categories;
+
+-- ── Questions ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS questions (
+  id             TEXT PRIMARY KEY,
+  text           TEXT NOT NULL,
+  category_id    TEXT,                          -- no FK so orphan questions survive
+  type           TEXT NOT NULL DEFAULT 'text',  -- text | image | audio
+  difficulty     TEXT NOT NULL DEFAULT 'easy',  -- easy | medium | hard
+  points         INTEGER NOT NULL DEFAULT 10,
+  wrong_points   INTEGER NOT NULL DEFAULT 1,
+  media_path     TEXT,
+  correct_answer TEXT,
+  options        TEXT NOT NULL DEFAULT '',      -- ';'-separated option strings
+  is_used        BOOLEAN NOT NULL DEFAULT false,
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all_questions" ON questions FOR ALL USING (true) WITH CHECK (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE questions;

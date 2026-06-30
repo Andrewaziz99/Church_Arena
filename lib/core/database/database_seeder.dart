@@ -17,16 +17,27 @@ class DatabaseSeeder {
     'cat-r1-56', 'cat-r2-56', 'cat-r3-56',
   ];
 
-  static Future<void> seed(DatabaseHelper dbHelper) async {
+  /// Seeds demo data.
+  /// Pass [force] = true to wipe existing seed categories/questions and re-insert.
+  static Future<void> seed(DatabaseHelper dbHelper, {bool force = false}) async {
     final db = await dbHelper.database;
     final idList = _catIds.map((id) => "'$id'").join(',');
-    final existing = await db.rawQuery(
-      'SELECT COUNT(*) as c FROM categories WHERE id IN ($idList)',
-    );
-    final count = (existing.first['c'] as int?) ?? 0;
-    if (count == _catIds.length) {
-      AppLogger.i('DatabaseSeeder: demo categories already present, skipping.');
-      return;
+
+    if (force) {
+      AppLogger.i('DatabaseSeeder: force re-seeding — removing old seed data…');
+      await db.delete('questions',
+          where: 'category_id IN ($idList)');
+      await db.delete('categories',
+          where: 'id IN ($idList)');
+    } else {
+      final existing = await db.rawQuery(
+        'SELECT COUNT(*) as c FROM categories WHERE id IN ($idList)',
+      );
+      final count = (existing.first['c'] as int?) ?? 0;
+      if (count == _catIds.length) {
+        AppLogger.i('DatabaseSeeder: demo categories already present, skipping.');
+        return;
+      }
     }
     AppLogger.i('DatabaseSeeder: seeding demo data…');
 

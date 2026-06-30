@@ -303,6 +303,12 @@ class _DashboardContentState extends State<_DashboardContent> {
                         icon: Icons.dataset_rounded,
                         onTap: () => _seedData(context),
                       ),
+                      _ActionButton(
+                        label: 'FORCE RESEED',
+                        icon: Icons.refresh_rounded,
+                        danger: true,
+                        onTap: () => _seedData(context, force: true),
+                      ),
                     ],
                   ),
 
@@ -591,18 +597,18 @@ class _StatCard extends StatelessWidget {
 
 // ── Seed helper ────────────────────────────────────────────────────────────────
 
-Future<void> _seedData(BuildContext context) async {
+Future<void> _seedData(BuildContext context, {bool force = false}) async {
   final messenger = ScaffoldMessenger.of(context);
   messenger.showSnackBar(
-    const SnackBar(
-        content: Text('جارٍ إضافة الأسئلة التجريبية…'),
-        duration: Duration(seconds: 2)),
+    SnackBar(
+        content: Text(force ? 'إعادة إضافة الأسئلة التجريبية…' : 'جارٍ إضافة الأسئلة التجريبية…'),
+        duration: const Duration(seconds: 2)),
   );
-  await DatabaseSeeder.seed(getIt<DatabaseHelper>());
+  await DatabaseSeeder.seed(getIt<DatabaseHelper>(), force: force);
   if (context.mounted) {
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('✅  تمت إضافة ٣٦ سؤالاً في ٣ فئات'),
+        content: Text('✅  تمت إضافة ١٠٨ أسئلة في ٩ فئات'),
         backgroundColor: AppColors.greenSuccess,
         duration: Duration(seconds: 3),
       ),
@@ -616,27 +622,35 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool primary;
+  final bool danger;
   final VoidCallback onTap;
 
   const _ActionButton(
       {required this.label,
       required this.icon,
       required this.onTap,
-      this.primary = false});
+      this.primary = false,
+      this.danger = false});
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = primary
+        ? AppColors.blueContent
+        : danger
+            ? const Color(0xFFD32F2F)
+            : AppColors.surface;
+    final fgColor = (primary || danger) ? Colors.white : AppColors.textPrimary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding:
             const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         decoration: BoxDecoration(
-          color: primary ? AppColors.blueContent : AppColors.surface,
+          color: bgColor,
           borderRadius: BorderRadius.circular(30),
-          border: primary
-              ? null
-              : Border.all(color: AppColors.border, width: 1.5),
+          border: (!primary && !danger)
+              ? Border.all(color: AppColors.border, width: 1.5)
+              : null,
           boxShadow: primary
               ? [
                   BoxShadow(
@@ -644,26 +658,31 @@ class _ActionButton extends StatelessWidget {
                       blurRadius: 12,
                       offset: const Offset(0, 4))
                 ]
-              : [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2))
-                ],
+              : danger
+                  ? [
+                      BoxShadow(
+                          color: const Color(0xFFD32F2F).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4))
+                    ]
+                  : [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2))
+                    ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 18,
-                color: primary ? Colors.white : AppColors.textPrimary),
+            Icon(icon, size: 18, color: fgColor),
             const SizedBox(width: 8),
             Text(
               label,
               style: GoogleFonts.alexandria(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: primary ? Colors.white : AppColors.textPrimary,
+                color: fgColor,
                 letterSpacing: 0.5,
               ),
             ),

@@ -14,4 +14,5 @@ abstract class QuestionRepository {
   Future<Either<Failure, List<Category>>> getCategories();
   Future<Either<Failure, Category>> saveCategory(Category category);
   Future<Either<Failure, Unit>> deleteCategory(String id);
+  Future<Either<Failure, Unit>> clearAllQuestions();
 }

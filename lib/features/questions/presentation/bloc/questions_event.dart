@@ -57,3 +57,17 @@ class SaveCategory extends QuestionsEvent {
   @override
   List<Object?> get props => [category];
 }
+
+class ClearAllQuestions extends QuestionsEvent {
+  const ClearAllQuestions();
+  @override
+  List<Object?> get props => [];
+}
+
+/// Internal event fired by the RemoteSyncBus listener.
+/// Does NOT show a loading spinner — refreshes silently so the UI never flashes.
+class _RemoteRefreshQuestions extends QuestionsEvent {
+  const _RemoteRefreshQuestions();
+  @override
+  List<Object?> get props => [];
+}

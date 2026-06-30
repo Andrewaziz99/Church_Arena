@@ -12,6 +12,7 @@ class QuestionIsarModel {
   final String? correctAnswer;
   final List<String> options;
   final bool isUsed;
+  final int wrongPoints;
 
   const QuestionIsarModel({
     required this.id,
@@ -24,6 +25,7 @@ class QuestionIsarModel {
     this.correctAnswer,
     this.options = const [],
     this.isUsed = false,
+    this.wrongPoints = 1,
   });
 
   Question toEntity() => Question(
@@ -33,6 +35,7 @@ class QuestionIsarModel {
         type: QuestionType.values.byName(type),
         difficulty: DifficultyLevel.values.byName(difficulty),
         points: points,
+        wrongPoints: wrongPoints,
         mediaPath: mediaPath,
         correctAnswer: correctAnswer,
         options: options,
@@ -46,6 +49,7 @@ class QuestionIsarModel {
         type: q.type.name,
         difficulty: q.difficulty.name,
         points: q.points,
+        wrongPoints: q.wrongPoints,
         mediaPath: q.mediaPath,
         correctAnswer: q.correctAnswer,
         options: q.options,
@@ -59,6 +63,7 @@ class QuestionIsarModel {
         'type': type,
         'difficulty': difficulty,
         'points': points,
+        'wrong_points': wrongPoints,
         'media_path': mediaPath,
         'correct_answer': correctAnswer,
         'options': options.join(';'),
@@ -74,6 +79,7 @@ class QuestionIsarModel {
       type: m['type'] as String,
       difficulty: m['difficulty'] as String,
       points: m['points'] as int,
+      wrongPoints: (m['wrong_points'] as int?) ?? 1,
       mediaPath: m['media_path'] as String?,
       correctAnswer: m['correct_answer'] as String?,
       options: optStr.isEmpty ? [] : optStr.split(';'),

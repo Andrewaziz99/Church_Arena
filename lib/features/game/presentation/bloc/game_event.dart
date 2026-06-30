@@ -156,3 +156,24 @@ class EndGame extends GameEvent {
   @override
   List<Object> get props => [];
 }
+
+/// Controller pressed "Show Answer" in the both-wrong screen.
+class RevealAnswer extends GameEvent {
+  const RevealAnswer();
+  @override
+  List<Object> get props => [];
+}
+
+/// Controller pressed "Next Question" without revealing, in the both-wrong screen.
+class SkipAfterBothWrong extends GameEvent {
+  const SkipAfterBothWrong();
+  @override
+  List<Object> get props => [];
+}
+
+/// Fired by a Timer (or the Skip button) to advance after the answer reveal.
+class AnswerRevealTick extends GameEvent {
+  const AnswerRevealTick();
+  @override
+  List<Object> get props => [];
+}

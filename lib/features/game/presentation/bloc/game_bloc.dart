@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
 import '../../../../services/arduino/arduino_service.dart';
 import '../../../../services/audio/audio_service.dart';
+import '../../../../services/sync/supabase_sync_service.dart';
 import '../../../questions/domain/entities/question.dart';
 import '../../../teams/domain/entities/team.dart';
 import '../../domain/entities/game_session.dart';
@@ -20,7 +21,11 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
   Timer? _gameTimer;
   Timer? _buzzTimer;
+  Timer? _revealTimer;
   StreamSubscription<String>? _buzzerSubscription;
+
+  /// Session to advance after the 2-second answer-reveal screen expires.
+  GameSession? _pendingAdvanceSession;
 
   // ── Pending round data (stored at competition start, consumed on transition) ─
   List<Question>? _pendingR2Questions;
@@ -50,6 +55,9 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     on<ResumeTimer>(_onResumeTimer);
     on<TimerTick>(_onTimerTick);
     on<EndGame>(_onEndGame);
+    on<RevealAnswer>(_onRevealAnswer);
+    on<SkipAfterBothWrong>(_onSkipAfterBothWrong);
+    on<AnswerRevealTick>(_onAnswerRevealTick);
 
     _buzzerSubscription = arduinoService.buzzerStream.listen((teamIndex) {
       final s = state;
@@ -62,6 +70,22 @@ class GameBloc extends Bloc<GameEvent, GameState> {
         add(BuzzerPressed(teams[idx - 1].id));
       }
     });
+  }
+
+  // ── Supabase sync helper ─────────────────────────────────────────────────
+
+  /// Fire-and-forget: push current session state to Supabase.
+  void _syncSession(GameSession session, {String status = 'active'}) {
+    final section = session.teams.isNotEmpty ? session.teams.first.section : '';
+    SupabaseSyncService.instance.syncGameSession(
+      sessionId: session.id,
+      section: section,
+      status: status,
+      currentRound: session.roundNumber,
+      currentQuestionIndex: session.currentQuestionIndex,
+      buzzedTeamId: session.buzzedTeamId,
+      timerRemaining: session.timerRemaining,
+    );
   }
 
   // ── Timer helpers ─────────────────────────────────────────────────────────
@@ -102,6 +126,8 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     if (s is GameTeamTurn) return s.session;
     if (s is GamePairDisplay) return s.session;
     if (s is GamePressureQuestion) return s.session;
+    if (s is GameShowingAnswer) return s.session;
+    if (s is GameBothWrong) return s.session;
     return null;
   }
 
@@ -292,6 +318,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     );
 
     await repository.saveSession(session);
+    _syncSession(session);
     arduinoService.resetBuzzers();
     emit(GameTeamTurn(session));
   }
@@ -410,6 +437,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       currentPairIndex: 0,
     );
     await repository.saveSession(session);
+    _syncSession(session);
     arduinoService.resetBuzzers();
     emit(GamePairDisplay(session));
   }
@@ -433,6 +461,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       sharedTimerSeconds: _pendingR3SharedTimer,
     );
     await repository.saveSession(session);
+    _syncSession(session);
     emit(GameTeamTurn(session));
   }
 
@@ -478,10 +507,16 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     if (s is GameWaitingSecondTeam) session = s.session;
     if (session == null) return;
 
-    // R1: only current team may buzz
+    // R1: who may buzz depends on whether this is a steal opportunity
     if (session.roundType == RoundType.classic) {
-      final current = session.currentTeam;
-      if (current == null || event.teamId != current.id) return;
+      if (s is GameWaitingSecondTeam && session.firstWrongTeamId != null) {
+        // Steal chance: any team except the one that answered wrong
+        if (event.teamId == session.firstWrongTeamId) return;
+      } else {
+        // Normal R1: only the current team may buzz
+        final current = session.currentTeam;
+        if (current == null || event.teamId != current.id) return;
+      }
     }
 
     // R2: only teams in the current pair may buzz
@@ -502,6 +537,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       timerRemaining: session.timerSeconds,
     );
     await repository.saveSession(updated);
+    _syncSession(updated);
     emit(GameBuzzedDisplay(updated, 3));
     _startBuzzTimer();
   }
@@ -570,13 +606,30 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       isDoubleActive: false,
     );
 
-    switch (updated.roundType) {
-      case RoundType.classic:
-        await _advanceR1Question(updated, emit);
-      case RoundType.penaltyShootout:
-        await _advanceR2Pair(updated, emit);
-      case RoundType.underPressure:
-        break; // handled above
+    // Push updated team scores to Supabase.
+    SupabaseSyncService.instance.syncTeamsUp(updatedTeams);
+    _syncSession(updated);
+
+    // Show correct answer for 2 seconds, then advance.
+    final currentQ = session.currentQuestionIndex < session.questions.length
+        ? session.questions[session.currentQuestionIndex]
+        : null;
+    if (currentQ != null) {
+      _pendingAdvanceSession = updated;
+      emit(GameShowingAnswer(updated, currentQ));
+      _revealTimer?.cancel();
+      _revealTimer = Timer(const Duration(seconds: 2), () {
+        if (!isClosed) add(const AnswerRevealTick());
+      });
+    } else {
+      switch (updated.roundType) {
+        case RoundType.classic:
+          await _advanceR1Question(updated, emit);
+        case RoundType.penaltyShootout:
+          await _advanceR2Pair(updated, emit);
+        case RoundType.underPressure:
+          break;
+      }
     }
   }
 
@@ -588,8 +641,12 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       await audioService.playWrong();
       final currentTeam = session.currentTeam;
       if (currentTeam == null) return;
+      final r3Question = session.currentQuestionIndex < session.questions.length
+          ? session.questions[session.currentQuestionIndex]
+          : null;
+      final r3Penalty = r3Question?.wrongPoints ?? 1;
       final penalisedTeams = session.teams.map((t) {
-        if (t.id == currentTeam.id) return t.copyWith(score: t.score - 1);
+        if (t.id == currentTeam.id) return t.copyWith(score: t.score - r3Penalty);
         return t;
       }).toList();
       await _advanceContestant(session.copyWith(teams: penalisedTeams), emit);
@@ -603,20 +660,47 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     final buzzedId = session.buzzedTeamId;
     if (buzzedId == null) return;
 
+    // Use this question's wrongPoints for the penalty
+    final currentQuestion = session.currentQuestionIndex < session.questions.length
+        ? session.questions[session.currentQuestionIndex]
+        : null;
+    final penalty = currentQuestion?.wrongPoints ?? 1;
+
     final penalisedTeams = session.teams.map((t) {
-      if (t.id == buzzedId) return t.copyWith(score: t.score - 1);
+      if (t.id == buzzedId) return t.copyWith(score: t.score - penalty);
       return t;
     }).toList();
 
     if (session.roundType == RoundType.classic) {
-      // R1: no second-team chance
-      final updated = session.copyWith(
-        teams: penalisedTeams,
-        buzzedTeamId: null,
-        firstWrongTeamId: null,
-        isDoubleActive: false,
-      );
-      await _advanceR1Question(updated, emit);
+      if (session.firstWrongTeamId == null) {
+        // First wrong in R1 → open steal to any other team
+        final updated = session.copyWith(
+          teams: penalisedTeams,
+          buzzedTeamId: null,
+          firstWrongTeamId: buzzedId,
+          timerRemaining: session.timerSeconds,
+          status: GameStatus.active,
+          isDoubleActive: false,
+        );
+        await repository.saveSession(updated);
+        SupabaseSyncService.instance.syncTeamsUp(penalisedTeams);
+        _syncSession(updated);
+        arduinoService.resetBuzzers();
+        emit(GameWaitingSecondTeam(updated));
+      } else {
+        // Second wrong in R1 → let controller decide whether to reveal answer
+        final updated = session.copyWith(
+          teams: penalisedTeams,
+          buzzedTeamId: null,
+          firstWrongTeamId: null,
+          isDoubleActive: false,
+        );
+        if (currentQuestion != null) {
+          emit(GameBothWrong(updated, currentQuestion));
+        } else {
+          await _advanceR1Question(updated, emit);
+        }
+      }
       return;
     }
 
@@ -632,19 +716,70 @@ class GameBloc extends Bloc<GameEvent, GameState> {
           isDoubleActive: false,
         );
         await repository.saveSession(updated);
+        SupabaseSyncService.instance.syncTeamsUp(penalisedTeams);
+        _syncSession(updated);
         arduinoService.resetBuzzers();
         emit(GameWaitingSecondTeam(updated));
       } else {
-        // Second wrong in R2 → advance pair
+        // Second wrong in R2 → let controller decide whether to reveal answer
         final updated = session.copyWith(
           teams: penalisedTeams,
           buzzedTeamId: null,
           firstWrongTeamId: null,
           isDoubleActive: false,
         );
-        await _advanceR2Pair(updated, emit);
+        if (currentQuestion != null) {
+          emit(GameBothWrong(updated, currentQuestion));
+        } else {
+          await _advanceR2Pair(updated, emit);
+        }
       }
       return;
+    }
+  }
+
+  // ── Answer reveal handlers ────────────────────────────────────────────────
+
+  Future<void> _onRevealAnswer(
+      RevealAnswer event, Emitter<GameState> emit) async {
+    if (state is! GameBothWrong) return;
+    final s = state as GameBothWrong;
+    _pendingAdvanceSession = s.session;
+    emit(GameShowingAnswer(s.session, s.question));
+    _revealTimer?.cancel();
+    _revealTimer = Timer(const Duration(seconds: 2), () {
+      if (!isClosed) add(const AnswerRevealTick());
+    });
+  }
+
+  Future<void> _onSkipAfterBothWrong(
+      SkipAfterBothWrong event, Emitter<GameState> emit) async {
+    if (state is! GameBothWrong) return;
+    final s = state as GameBothWrong;
+    _revealTimer?.cancel();
+    _pendingAdvanceSession = null;
+    switch (s.session.roundType) {
+      case RoundType.classic:
+        await _advanceR1Question(s.session, emit);
+      case RoundType.penaltyShootout:
+        await _advanceR2Pair(s.session, emit);
+      case RoundType.underPressure:
+        break;
+    }
+  }
+
+  Future<void> _onAnswerRevealTick(
+      AnswerRevealTick event, Emitter<GameState> emit) async {
+    final pending = _pendingAdvanceSession;
+    if (pending == null) return;
+    _pendingAdvanceSession = null;
+    switch (pending.roundType) {
+      case RoundType.classic:
+        await _advanceR1Question(pending, emit);
+      case RoundType.penaltyShootout:
+        await _advanceR2Pair(pending, emit);
+      case RoundType.underPressure:
+        break;
     }
   }
 
@@ -735,6 +870,13 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     final session = _sessionFromState();
     final sorted = [...(session?.teams ?? <Team>[])]
       ..sort((a, b) => b.score.compareTo(a.score));
+
+    // Push final game session status + final team scores to Supabase.
+    if (session != null) {
+      _syncSession(session, status: 'ended');
+      SupabaseSyncService.instance.syncTeamsUp(sorted);
+    }
+
     await repository.clearSession();
     emit(GameEnded(sorted));
   }
@@ -743,6 +885,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
   Future<void> close() {
     _stopGameTimer();
     _stopBuzzTimer();
+    _revealTimer?.cancel();
     _buzzerSubscription?.cancel();
     return super.close();
   }

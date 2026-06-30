@@ -14,6 +14,8 @@ class Question extends Equatable {
   final String? correctAnswer;
   final List<String> options;
   final bool isUsed;
+  /// Points deducted when this question is answered incorrectly. Default: 1.
+  final int wrongPoints;
 
   const Question({
     required this.id,
@@ -26,6 +28,7 @@ class Question extends Equatable {
     this.correctAnswer,
     this.options = const [],
     this.isUsed = false,
+    this.wrongPoints = 1,
   });
 
   Question copyWith({
@@ -35,6 +38,7 @@ class Question extends Equatable {
     QuestionType? type,
     DifficultyLevel? difficulty,
     int? points,
+    int? wrongPoints,
     Object? mediaPath = _sentinel,
     Object? correctAnswer = _sentinel,
     List<String>? options,
@@ -47,6 +51,7 @@ class Question extends Equatable {
       type: type ?? this.type,
       difficulty: difficulty ?? this.difficulty,
       points: points ?? this.points,
+      wrongPoints: wrongPoints ?? this.wrongPoints,
       mediaPath: mediaPath == _sentinel ? this.mediaPath : mediaPath as String?,
       correctAnswer: correctAnswer == _sentinel ? this.correctAnswer : correctAnswer as String?,
       options: options ?? this.options,
@@ -56,7 +61,7 @@ class Question extends Equatable {
 
   @override
   List<Object?> get props => [id, text, categoryId, type, difficulty, points,
-        mediaPath, correctAnswer, options, isUsed];
+        wrongPoints, mediaPath, correctAnswer, options, isUsed];
 }
 
 const _sentinel = Object();

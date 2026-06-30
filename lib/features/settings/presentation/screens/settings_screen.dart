@@ -94,6 +94,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
   late int _timerDuration;
   late int _numberOfTeams;
   late bool _isFullscreen;
+  late TextEditingController _roomIdCtrl;
 
   @override
   void initState() {
@@ -104,6 +105,13 @@ class _SettingsBodyState extends State<_SettingsBody> {
     _timerDuration = widget.settings.timerDuration;
     _numberOfTeams = widget.settings.numberOfTeams;
     _isFullscreen = widget.settings.isFullscreen;
+    _roomIdCtrl = TextEditingController(text: widget.settings.roomId);
+  }
+
+  @override
+  void dispose() {
+    _roomIdCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -296,6 +304,37 @@ class _SettingsBodyState extends State<_SettingsBody> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          _SectionTitle('Online Sync'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Room ID',
+                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Devices with the same Room ID share scores and session data in real-time.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _roomIdCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Room ID',
+                      hintText: 'e.g. room1, main-hall, youth-room',
+                      prefixIcon: Icon(Icons.meeting_room_rounded),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
@@ -314,6 +353,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
   }
 
   void _save() {
+    final roomId = _roomIdCtrl.text.trim();
     final updated = widget.settings.copyWith(
       comPort: _comPort,
       baudRate: _baudRate,
@@ -321,6 +361,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
       timerDuration: _timerDuration,
       numberOfTeams: _numberOfTeams,
       isFullscreen: _isFullscreen,
+      roomId: roomId.isEmpty ? 'room1' : roomId,
     );
     context.read<SettingsBloc>().add(SaveSettings(updated));
     context.showSnackBar('Settings saved');

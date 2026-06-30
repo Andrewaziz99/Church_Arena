@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:window_manager/window_manager.dart';
 import '../constants/app_colors.dart';
 import '../../services/arduino/arduino_service.dart';
 import '../../services/sync/supabase_sync_service.dart';
@@ -135,6 +136,7 @@ class _AppNavSidebarState extends State<AppNavSidebar> {
             syncOk: _syncOk,
             onlineOk: _onlineOk,
             time: _time,
+            roomId: appRoomId,
           ),
 
           const Divider(height: 1, thickness: 1, color: AppColors.border),
@@ -144,6 +146,48 @@ class _AppNavSidebarState extends State<AppNavSidebar> {
               label: 'SETUP',
               route: '/settings',
               activeRoute: widget.activeRoute),
+          // ── Exit button ──────────────────────────────────────
+          GestureDetector(
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Exit App?'),
+                  content: const Text('Close Church Arena?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Exit'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) await windowManager.close();
+            },
+            child: Container(
+              width: 72,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.power_settings_new_rounded,
+                      size: 20, color: AppColors.error),
+                  const SizedBox(height: 4),
+                  Text('EXIT',
+                      style: GoogleFonts.alexandria(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.error,
+                          letterSpacing: 0.5)),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
         ],
       ),
@@ -158,12 +202,14 @@ class _StatusCluster extends StatelessWidget {
   final bool syncOk;
   final bool onlineOk;
   final String time;
+  final String roomId;
 
   const _StatusCluster({
     required this.arduinoOk,
     required this.syncOk,
     required this.onlineOk,
     required this.time,
+    required this.roomId,
   });
 
   @override
@@ -193,11 +239,36 @@ class _StatusCluster extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
+          // Room ID pill
+          Tooltip(
+            message: 'Room: $roomId',
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.blueContent.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.blueContent.withOpacity(0.3)),
+              ),
+              child: Text(
+                roomId,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.alexandria(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.blueContent,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           // Clock pill
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: AppColors.orangeBg,
               borderRadius: BorderRadius.circular(20),

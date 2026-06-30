@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../../../services/arduino/arduino_service.dart';
+import '../../../../services/sync/supabase_sync_service.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/usecases/get_settings_usecase.dart';
 import '../../domain/usecases/save_settings_usecase.dart';
@@ -35,6 +36,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     result.fold(
       (failure) => emit(SettingsError(failure.message)),
       (settings) {
+        appRoomId = settings.roomId; // apply saved room to sync service
         emit(SettingsLoaded(settings));
         // Auto-connect to Arduino using saved COM port on startup.
         if (settings.comPort.isNotEmpty && !arduinoService.isConnected) {
@@ -52,6 +54,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     result.fold(
       (failure) => emit(SettingsError(failure.message)),
       (_) {
+        appRoomId = event.settings.roomId; // apply new room immediately
         emit(SettingsLoaded(event.settings));
         // Reconnect if COM port or baud rate changed.
         final prev = state is SettingsLoaded

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:dartz/dartz.dart';
@@ -6,6 +7,7 @@ import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/app_logger.dart';
+import '../../../../services/sync/supabase_sync_service.dart';
 import '../../domain/entities/category.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/question_repository.dart';
@@ -17,6 +19,7 @@ import '../models/question_isar_model.dart';
 class QuestionRepositoryImpl implements QuestionRepository {
   final QuestionLocalDataSource _dataSource;
   final _uuid = const Uuid();
+  final _sync = SupabaseSyncService.instance;
 
   QuestionRepositoryImpl(this._dataSource);
 
@@ -41,6 +44,7 @@ class QuestionRepositoryImpl implements QuestionRepository {
   Future<Either<Failure, Question>> saveQuestion(Question question) async {
     try {
       await _dataSource.saveQuestion(QuestionIsarModel.fromEntity(question));
+      unawaited(_sync.syncQuestionUp(question));
       return Right(question);
     } catch (e) {
       AppLogger.e('saveQuestion: $e');
@@ -52,6 +56,7 @@ class QuestionRepositoryImpl implements QuestionRepository {
   Future<Either<Failure, Unit>> deleteQuestion(String id) async {
     try {
       await _dataSource.deleteQuestion(id);
+      unawaited(_sync.deleteQuestionRemote(id));
       return const Right(unit);
     } catch (e) {
       AppLogger.e('deleteQuestion: $e');
@@ -75,6 +80,7 @@ class QuestionRepositoryImpl implements QuestionRepository {
       }
       if (questions.isEmpty) return const Right(0);
       await _dataSource.saveQuestions(questions.map(QuestionIsarModel.fromEntity).toList());
+      unawaited(_sync.syncQuestionsUp(questions));
       return Right(questions.length);
     } catch (e) {
       AppLogger.e('importFromFile: $e');
@@ -82,17 +88,68 @@ class QuestionRepositoryImpl implements QuestionRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, List<Category>>> getCategories() async {
+    try {
+      final models = await _dataSource.getCategories();
+      return Right(models.map((m) => m.toEntity()).toList());
+    } catch (e) {
+      AppLogger.e('getCategories: $e');
+      return Left(DatabaseFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Category>> saveCategory(Category category) async {
+    try {
+      await _dataSource.saveCategory(CategoryIsarModel.fromEntity(category));
+      unawaited(_sync.syncCategoryUp(category));
+      return Right(category);
+    } catch (e) {
+      AppLogger.e('saveCategory: $e');
+      return Left(DatabaseFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> deleteCategory(String id) async {
+    try {
+      await _dataSource.deleteCategory(id);
+      unawaited(_sync.deleteCategoryRemote(id));
+      return const Right(unit);
+    } catch (e) {
+      AppLogger.e('deleteCategory: $e');
+      return Left(DatabaseFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> clearAllQuestions() async {
+    try {
+      await _dataSource.deleteAllQuestions();
+      unawaited(_sync.clearAllQuestionsRemote());
+      return const Right(unit);
+    } catch (e) {
+      AppLogger.e('clearAllQuestions: $e');
+      return Left(DatabaseFailure(e.toString()));
+    }
+  }
+
+  // ── CSV / Excel import helpers ─────────────────────────────────────────────
+
   Future<List<Question>> _importFromCsv(File file) async {
-    final rows = const CsvToListConverter()
-        .convert(await file.readAsString(), eol: '\n');
+    final rows =
+        const CsvToListConverter().convert(await file.readAsString(), eol: '\n');
     final out = <Question>[];
     for (var i = 1; i < rows.length; i++) {
       final r = rows[i];
       if (r.length < 5) continue;
-      final q = _row(r[0].toString(), r[1].toString(), r[2].toString(),
-          r[3].toString(), r[4].toString(),
-          answer: r.length > 5 ? r[5]?.toString() : null,
-          opts: r.length > 6 ? r[6]?.toString() : null);
+      final q = _row(
+        r[0].toString(), r[1].toString(), r[2].toString(),
+        r[3].toString(), r[4].toString(),
+        answer: r.length > 5 ? r[5]?.toString() : null,
+        opts: r.length > 6 ? r[6]?.toString() : null,
+      );
       if (q != null) out.add(q);
     }
     return out;
@@ -120,53 +177,34 @@ class QuestionRepositoryImpl implements QuestionRepository {
     return out;
   }
 
-  Question? _row(String text, String cat, String typeStr, String diffStr,
-      String pts, {String? answer, String? opts}) {
+  Question? _row(
+    String text, String cat, String typeStr, String diffStr, String pts, {
+    String? answer,
+    String? opts,
+  }) {
     if (text.trim().isEmpty) return null;
     final type = QuestionType.values.firstWhere(
-        (t) => t.name.toLowerCase() == typeStr.toLowerCase(),
-        orElse: () => QuestionType.text);
-    final diff = DifficultyLevel.values.firstWhere(
-        (d) => d.name.toLowerCase() == diffStr.toLowerCase(),
-        orElse: () => DifficultyLevel.easy);
-    return Question(
-      id: _uuid.v4(), text: text, categoryId: cat, type: type,
-      difficulty: diff, points: int.tryParse(pts) ?? 10,
-      correctAnswer: answer,
-      options: opts?.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList() ?? [],
+      (t) => t.name.toLowerCase() == typeStr.toLowerCase(),
+      orElse: () => QuestionType.text,
     );
-  }
-
-  @override
-  Future<Either<Failure, List<Category>>> getCategories() async {
-    try {
-      final models = await _dataSource.getCategories();
-      return Right(models.map((m) => m.toEntity()).toList());
-    } catch (e) {
-      AppLogger.e('getCategories: $e');
-      return Left(DatabaseFailure(e.toString()));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Category>> saveCategory(Category category) async {
-    try {
-      await _dataSource.saveCategory(CategoryIsarModel.fromEntity(category));
-      return Right(category);
-    } catch (e) {
-      AppLogger.e('saveCategory: $e');
-      return Left(DatabaseFailure(e.toString()));
-    }
-  }
-
-  @override
-  Future<Either<Failure, Unit>> deleteCategory(String id) async {
-    try {
-      await _dataSource.deleteCategory(id);
-      return const Right(unit);
-    } catch (e) {
-      AppLogger.e('deleteCategory: $e');
-      return Left(DatabaseFailure(e.toString()));
-    }
+    final diff = DifficultyLevel.values.firstWhere(
+      (d) => d.name.toLowerCase() == diffStr.toLowerCase(),
+      orElse: () => DifficultyLevel.easy,
+    );
+    return Question(
+      id: _uuid.v4(),
+      text: text,
+      categoryId: cat,
+      type: type,
+      difficulty: diff,
+      points: int.tryParse(pts) ?? 10,
+      correctAnswer: answer,
+      options: opts
+              ?.split(';')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList() ??
+          [],
+    );
   }
 }

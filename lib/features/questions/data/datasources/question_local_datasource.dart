@@ -67,4 +67,9 @@ class QuestionLocalDataSource {
     final db = await _db.database;
     await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
+
+  Future<void> deleteAllQuestions() async {
+    final db = await _db.database;
+    await db.delete('questions');
+  }
 }

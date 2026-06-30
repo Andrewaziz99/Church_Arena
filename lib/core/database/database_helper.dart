@@ -6,7 +6,7 @@ import 'package:path/path.dart';
 /// Singleton SQLite database manager (Windows Desktop via sqflite_common_ffi).
 class DatabaseHelper {
   static const _dbName = 'church_arena.db';
-  static const _dbVersion = 4;
+  static const _dbVersion = 5;
 
   static final DatabaseHelper instance = DatabaseHelper._();
   DatabaseHelper._();
@@ -54,6 +54,7 @@ class DatabaseHelper {
         type TEXT NOT NULL,
         difficulty TEXT NOT NULL,
         points INTEGER NOT NULL,
+        wrong_points INTEGER NOT NULL DEFAULT 1,
         media_path TEXT,
         correct_answer TEXT,
         options TEXT NOT NULL DEFAULT '',
@@ -82,6 +83,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       await db.execute("ALTER TABLE categories ADD COLUMN round_type TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldVersion < 5) {
+      await db.execute("ALTER TABLE questions ADD COLUMN wrong_points INTEGER NOT NULL DEFAULT 1");
     }
   }
 }

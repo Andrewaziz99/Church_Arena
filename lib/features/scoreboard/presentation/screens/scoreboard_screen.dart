@@ -203,54 +203,7 @@ class _ScoreboardScreenState extends State<ScoreboardScreen> {
                       Expanded(
                         child: teams.isEmpty
                             ? Center(child: Text('No results yet', style: GoogleFonts.alexandria(color: Colors.white54)))
-                            : Column(
-                                children: [
-                                  // Winner (rank 1)
-                                  if (teams.isNotEmpty)
-                                    _WinnerCard(team: teams[0])
-                                        .animate().fadeIn(duration: 500.ms).slideY(begin: 0.08, end: 0),
-
-                                  const SizedBox(height: 16),
-
-                                  // Rank 2 & 3
-                                  if (teams.length > 1)
-                                    Expanded(
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Expanded(
-                                            child: _PodiumCard(team: teams[1], rank: 2)
-                                                .animate(delay: 200.ms).fadeIn(duration: 400.ms),
-                                          ),
-                                          if (teams.length > 2) ...[
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: _PodiumCard(team: teams[2], rank: 3)
-                                                  .animate(delay: 350.ms).fadeIn(duration: 400.ms),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-
-                                  // Rank 4+
-                                  if (teams.length > 3) ...[
-                                    const SizedBox(height: 16),
-                                    Row(
-                                      children: teams.skip(3).toList().asMap().entries.map((e) {
-                                        return Expanded(
-                                          child: Padding(
-                                            padding: EdgeInsets.only(left: e.key > 0 ? 12 : 0),
-                                            child: _SmallRankCard(team: e.value, rank: e.key + 4)
-                                                .animate(delay: Duration(milliseconds: 500 + e.key * 80))
-                                                .fadeIn(duration: 300.ms),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                            : _SectionedScoreboard(teams: teams),
                       ),
 
                       // Bottom buttons
@@ -275,6 +228,265 @@ class _ScoreboardScreenState extends State<ScoreboardScreen> {
           }
           return const SizedBox.shrink();
         },
+      ),
+    );
+  }
+}
+
+// ── Sectioned scoreboard ──────────────────────────────────────────────────────
+
+/// Divides teams into 3 grade sections. Teams without a section go into
+/// an "Other" bucket so they're never hidden.
+class _SectionedScoreboard extends StatelessWidget {
+  final List<Team> teams;
+  const _SectionedScoreboard({required this.teams});
+
+  static const _sections = [
+    ('اولى وثانية',  const Color(0xFF1565C0), '١ & ٢'),
+    ('ثالثة ورابعة', const Color(0xFF6A1B9A), '٣ & ٤'),
+    ('خامسة وسادسة', const Color(0xFF1B5E20), '٥ & ٦'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    // Group by section
+    final Map<String, List<Team>> grouped = {};
+    for (final (sectionKey, _, __) in _sections) {
+      grouped[sectionKey] = [];
+    }
+    final others = <Team>[];
+    for (final team in teams) {
+      if (grouped.containsKey(team.section)) {
+        grouped[team.section]!.add(team);
+      } else {
+        others.add(team);
+      }
+    }
+    // Sort each group by score descending
+    for (final list in grouped.values) {
+      list.sort((a, b) => b.score.compareTo(a.score));
+    }
+    others.sort((a, b) => b.score.compareTo(a.score));
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (int i = 0; i < _sections.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                Expanded(
+                  child: _GradeSection(
+                    label: _sections[i].$3,
+                    subtitle: _sections[i].$1,
+                    color: _sections[i].$2,
+                    teams: grouped[_sections[i].$1] ?? [],
+                  ).animate(delay: Duration(milliseconds: i * 150))
+                      .fadeIn(duration: 400.ms)
+                      .slideY(begin: 0.06, end: 0),
+                ),
+              ],
+            ],
+          ),
+          if (others.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _GradeSection(
+              label: 'أخرى',
+              subtitle: 'بدون فئة',
+              color: const Color(0xFF37474F),
+              teams: others,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _GradeSection extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final Color color;
+  final List<Team> teams;
+
+  const _GradeSection({
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.teams,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.3),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(19),
+                topRight: Radius.circular(19),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    label,
+                    style: GoogleFonts.alexandria(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                    textDirection: TextDirection.rtl,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.alexandria(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white60,
+                  ),
+                  textDirection: TextDirection.rtl,
+                ),
+                const Spacer(),
+                Text(
+                  '${teams.length} فريق',
+                  style: GoogleFonts.alexandria(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white54,
+                  ),
+                  textDirection: TextDirection.rtl,
+                ),
+              ],
+            ),
+          ),
+
+          // Team rows
+          if (teams.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Center(
+                child: Text(
+                  'لا توجد فرق',
+                  style: GoogleFonts.alexandria(fontSize: 13, color: Colors.white38),
+                  textDirection: TextDirection.rtl,
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: teams.asMap().entries.map((e) {
+                  final rank = e.key + 1;
+                  final team = e.value;
+                  final isFirst = rank == 1;
+                  final initials = team.name
+                      .split(' ')
+                      .take(2)
+                      .map((w) => w.isNotEmpty ? w[0].toUpperCase() : '')
+                      .join();
+
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: e.key < teams.length - 1 ? 8 : 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isFirst
+                            ? color.withOpacity(0.35)
+                            : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: isFirst
+                            ? Border.all(color: color.withOpacity(0.7), width: 1.5)
+                            : null,
+                      ),
+                      child: Row(
+                        children: [
+                          // Rank
+                          SizedBox(
+                            width: 26,
+                            child: Text(
+                              '$rank',
+                              style: GoogleFonts.alexandria(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                color: isFirst ? Colors.white : Colors.white38,
+                              ),
+                            ),
+                          ),
+                          // Avatar
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(team.color).withOpacity(0.25),
+                              border: Border.all(color: Color(team.color), width: 2),
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style: GoogleFonts.alexandria(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(team.color),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Name
+                          Expanded(
+                            child: Text(
+                              team.name,
+                              style: GoogleFonts.alexandria(
+                                fontSize: 14,
+                                fontWeight: isFirst ? FontWeight.w800 : FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Score
+                          if (isFirst)
+                            const Icon(Icons.emoji_events_rounded,
+                                size: 16, color: AppColors.orangeBg),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${team.score}',
+                            style: GoogleFonts.alexandria(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: isFirst ? Colors.white : Colors.white60,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
       ),
     );
   }
