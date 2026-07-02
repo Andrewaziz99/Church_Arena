@@ -80,3 +80,17 @@ class QuestionsImported extends QuestionsState {
   @override
   List<Object?> get props => [count];
 }
+
+class QuestionsPushing extends QuestionsState {
+  const QuestionsPushing();
+  @override
+  List<Object?> get props => [];
+}
+
+class QuestionsPushed extends QuestionsState {
+  final int categoriesCount;
+  final int questionsCount;
+  const QuestionsPushed({required this.categoriesCount, required this.questionsCount});
+  @override
+  List<Object?> get props => [categoriesCount, questionsCount];
+}

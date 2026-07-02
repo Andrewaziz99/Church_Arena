@@ -16,6 +16,8 @@ class Question extends Equatable {
   final bool isUsed;
   /// Points deducted when this question is answered incorrectly. Default: 1.
   final int wrongPoints;
+  /// Display order within a category (used for تحت الضغط / r3 rounds). Default: 0.
+  final int sortOrder;
 
   const Question({
     required this.id,
@@ -29,6 +31,7 @@ class Question extends Equatable {
     this.options = const [],
     this.isUsed = false,
     this.wrongPoints = 1,
+    this.sortOrder = 0,
   });
 
   Question copyWith({
@@ -39,6 +42,7 @@ class Question extends Equatable {
     DifficultyLevel? difficulty,
     int? points,
     int? wrongPoints,
+    int? sortOrder,
     Object? mediaPath = _sentinel,
     Object? correctAnswer = _sentinel,
     List<String>? options,
@@ -52,6 +56,7 @@ class Question extends Equatable {
       difficulty: difficulty ?? this.difficulty,
       points: points ?? this.points,
       wrongPoints: wrongPoints ?? this.wrongPoints,
+      sortOrder: sortOrder ?? this.sortOrder,
       mediaPath: mediaPath == _sentinel ? this.mediaPath : mediaPath as String?,
       correctAnswer: correctAnswer == _sentinel ? this.correctAnswer : correctAnswer as String?,
       options: options ?? this.options,
@@ -61,7 +66,7 @@ class Question extends Equatable {
 
   @override
   List<Object?> get props => [id, text, categoryId, type, difficulty, points,
-        wrongPoints, mediaPath, correctAnswer, options, isUsed];
+        wrongPoints, sortOrder, mediaPath, correctAnswer, options, isUsed];
 }
 
 const _sentinel = Object();

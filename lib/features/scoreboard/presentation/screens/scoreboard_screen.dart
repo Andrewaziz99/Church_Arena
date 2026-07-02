@@ -4,8 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../scoreboard/domain/competition_result.dart';
 import '../../../teams/domain/entities/team.dart';
 import '../bloc/scoreboard_bloc.dart';
 
@@ -18,11 +20,15 @@ class ScoreboardScreen extends StatefulWidget {
 
 class _ScoreboardScreenState extends State<ScoreboardScreen> {
   late final ConfettiController _confetti;
+  CompetitionResult? _selectedResult;
+  bool _viewingHistory = false;
 
   @override
   void initState() {
     super.initState();
     _confetti = ConfettiController(duration: const Duration(seconds: 6));
+    // Always load history on open
+    context.read<ScoreboardBloc>().add(const LoadResults());
   }
 
   @override
@@ -37,222 +43,545 @@ class _ScoreboardScreenState extends State<ScoreboardScreen> {
       backgroundColor: AppColors.scoreboardBg,
       body: BlocConsumer<ScoreboardBloc, ScoreboardState>(
         listener: (context, state) {
-          if (state is ScoreboardLoaded && state.showConfetti) _confetti.play();
+          if (state is ScoreboardLoaded && state.showConfetti) {
+            _confetti.play();
+            _viewingHistory = false;
+          }
+          // Auto-select the most recent result in history
+          if (state is ScoreboardHistory && state.history.isNotEmpty) {
+            setState(() => _selectedResult ??= state.history.first);
+          }
+          if (state is ScoreboardLoaded && state.history.isNotEmpty) {
+            setState(() => _selectedResult ??= state.history.first);
+          }
         },
         builder: (context, state) {
-          if (state is ScoreboardInitial) {
-            return Stack(
-              children: [
-                Center(
-                  child: Text('No scoreboard data.', style: GoogleFonts.alexandria(color: Colors.white54, fontSize: 18)),
-                ),
-                Positioned(
-                  top: 20, left: 20,
-                  child: GestureDetector(
-                    onTap: () => context.canPop() ? context.pop() : context.go('/'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 16),
-                          const SizedBox(width: 6),
-                          Text('BACK', style: GoogleFonts.alexandria(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 1)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          // ── Full-page "just finished" result ─────────────────────────────
+          if (state is ScoreboardLoaded && !_viewingHistory) {
+            return _CurrentResultView(
+              teams: state.rankedTeams,
+              history: state.history,
+              confetti: _confetti,
+              onViewHistory: () => setState(() => _viewingHistory = true),
             );
           }
-          if (state is ScoreboardLoaded) {
-            final teams = state.rankedTeams;
-            return Stack(
-              children: [
-                // ── Background ─────────────────────────────────
-                Positioned.fill(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: RadialGradient(
-                        center: Alignment(-0.3, -0.2),
-                        radius: 1.2,
-                        colors: [Color(0xFF1B3A6B), Color(0xFF0A1020)],
-                      ),
-                    ),
-                  ),
-                ),
 
-                // ── Confetti ────────────────────────────────────
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: ConfettiWidget(
-                    confettiController: _confetti,
-                    blastDirectionality: BlastDirectionality.explosive,
-                    numberOfParticles: 30,
-                    gravity: 0.05,
-                    colors: const [
-                      AppColors.orangeBg,
-                      AppColors.greenLight,
-                      AppColors.blueLight,
-                      Colors.white,
-                    ],
-                  ),
-                ),
+          // ── History browser ──────────────────────────────────────────────
+          final history = state is ScoreboardLoaded
+              ? state.history
+              : state is ScoreboardHistory
+                  ? state.history
+                  : <CompetitionResult>[];
 
-                // ── Back button ─────────────────────────────────
-                Positioned(
-                  top: 20,
-                  left: 20,
-                  child: GestureDetector(
-                    onTap: () => context.canPop() ? context.pop() : context.go('/'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 16),
-                          const SizedBox(width: 6),
-                          Text('BACK', style: GoogleFonts.alexandria(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 1)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+          final loading =
+              state is ScoreboardHistory && state.loading;
 
-                // ── Content ─────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'LEADERBOARD',
-                                style: GoogleFonts.alexandria(
-                                  fontSize: 60,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.orangeBg,
-                                  letterSpacing: -2,
-                                  height: 1,
-                                ),
-                              ),
-                              Text(
-                                'VIBRANT QUIZ FESTIVAL',
-                                style: GoogleFonts.alexandria(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white54,
-                                  letterSpacing: 3,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(),
-                          // Stats chip
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.07),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.12)),
-                            ),
-                            child: Row(
-                              children: [
-                                _StatChip(label: 'TEAMS', value: '${teams.length}'),
-                                const SizedBox(width: 28),
-                                _StatChip(label: 'STATUS', value: 'ACTIVE', valueColor: AppColors.greenLight),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/'),
-                            icon: const Icon(Icons.home_rounded, color: Colors.white70, size: 18),
-                            label: Text(
-                              AppStrings.backToDashboard,
-                              style: GoogleFonts.alexandria(color: Colors.white70, fontSize: 13),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white24),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 28),
-
-                      // ── Scoreboard body ─────────────────────────
-                      Expanded(
-                        child: teams.isEmpty
-                            ? Center(child: Text('No results yet', style: GoogleFonts.alexandria(color: Colors.white54)))
-                            : _SectionedScoreboard(teams: teams),
-                      ),
-
-                      // Bottom buttons
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: () => context.go('/'),
-                              icon: const Icon(Icons.replay_rounded),
-                              label: Text(AppStrings.playAgain, style: GoogleFonts.alexandria(fontWeight: FontWeight.w700)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          }
-          return const SizedBox.shrink();
+          return _HistoryBrowser(
+            history: history,
+            loading: loading,
+            selected: _selectedResult,
+            confetti: _confetti,
+            onSelect: (r) => setState(() => _selectedResult = r),
+            onDelete: (id) {
+              context.read<ScoreboardBloc>().add(DeleteResult(id));
+              if (_selectedResult?.id == id) {
+                setState(() => _selectedResult = null);
+              }
+            },
+            onBack: () => context.canPop() ? context.pop() : context.go('/'),
+          );
         },
       ),
     );
   }
 }
 
-// ── Sectioned scoreboard ──────────────────────────────────────────────────────
+// ── Current result (shown right after a game ends) ─────────────────────────────
 
-/// Divides teams into 3 grade sections. Teams without a section go into
-/// an "Other" bucket so they're never hidden.
+class _CurrentResultView extends StatelessWidget {
+  final List<Team> teams;
+  final List<CompetitionResult> history;
+  final ConfettiController confetti;
+  final VoidCallback onViewHistory;
+
+  const _CurrentResultView({
+    required this.teams,
+    required this.history,
+    required this.confetti,
+    required this.onViewHistory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Background
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-0.3, -0.2),
+                radius: 1.2,
+                colors: [Color(0xFF1B3A6B), Color(0xFF0A1020)],
+              ),
+            ),
+          ),
+        ),
+
+        // Confetti
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConfettiWidget(
+            confettiController: confetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 30,
+            gravity: 0.05,
+            colors: const [
+              AppColors.orangeBg,
+              AppColors.greenLight,
+              AppColors.blueLight,
+              Colors.white,
+            ],
+          ),
+        ),
+
+        // Content
+        Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'LEADERBOARD',
+                        style: GoogleFonts.alexandria(
+                          fontSize: 60,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.orangeBg,
+                          letterSpacing: -2,
+                          height: 1,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('EEEE, d MMMM yyyy').format(DateTime.now()),
+                        style: GoogleFonts.alexandria(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white54,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  // History button
+                  OutlinedButton.icon(
+                    onPressed: onViewHistory,
+                    icon: const Icon(Icons.history_rounded,
+                        color: Colors.white70, size: 18),
+                    label: Text(
+                      'History (${history.length})',
+                      style: GoogleFonts.alexandria(
+                          color: Colors.white70, fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => context.go('/'),
+                    icon: const Icon(Icons.home_rounded,
+                        color: Colors.white70, size: 18),
+                    label: Text(
+                      AppStrings.backToDashboard,
+                      style: GoogleFonts.alexandria(
+                          color: Colors.white70, fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 28),
+
+              Expanded(
+                child: teams.isEmpty
+                    ? Center(
+                        child: Text('No results',
+                            style: GoogleFonts.alexandria(
+                                color: Colors.white54)))
+                    : _SectionedScoreboard(teams: teams),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => context.go('/'),
+                      icon: const Icon(Icons.replay_rounded),
+                      label: Text(AppStrings.playAgain,
+                          style: GoogleFonts.alexandria(
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── History browser ────────────────────────────────────────────────────────────
+
+class _HistoryBrowser extends StatelessWidget {
+  final List<CompetitionResult> history;
+  final bool loading;
+  final CompetitionResult? selected;
+  final ConfettiController confetti;
+  final ValueChanged<CompetitionResult> onSelect;
+  final ValueChanged<String> onDelete;
+  final VoidCallback onBack;
+
+  const _HistoryBrowser({
+    required this.history,
+    required this.loading,
+    required this.selected,
+    required this.confetti,
+    required this.onSelect,
+    required this.onDelete,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-0.3, -0.2),
+                radius: 1.2,
+                colors: [Color(0xFF1B3A6B), Color(0xFF0A1020)],
+              ),
+            ),
+          ),
+        ),
+
+        Row(
+          children: [
+            // ── Left: result list ──────────────────────────────────────────
+            SizedBox(
+              width: 320,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: onBack,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: const Icon(Icons.arrow_back_ios_new_rounded,
+                                color: Colors.white70, size: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'HISTORY',
+                          style: GoogleFonts.alexandria(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.orangeBg,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      '${history.length} competition${history.length != 1 ? 's' : ''} saved',
+                      style: GoogleFonts.alexandria(
+                          fontSize: 12,
+                          color: Colors.white38,
+                          letterSpacing: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // List
+                  Expanded(
+                    child: loading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.orangeBg))
+                        : history.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No past results yet.\nPlay a game to record one!',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.alexandria(
+                                      color: Colors.white38, fontSize: 14),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
+                                itemCount: history.length,
+                                itemBuilder: (ctx, i) {
+                                  final r = history[i];
+                                  final isSelected = r.id == selected?.id;
+                                  return _ResultListTile(
+                                    result: r,
+                                    isSelected: isSelected,
+                                    onTap: () => onSelect(r),
+                                    onDelete: () => onDelete(r.id),
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Divider
+            Container(width: 1, color: Colors.white12),
+
+            // ── Right: detail panel ────────────────────────────────────────
+            Expanded(
+              child: selected == null
+                  ? Center(
+                      child: Text(
+                        'Select a result to view',
+                        style: GoogleFonts.alexandria(
+                            color: Colors.white38, fontSize: 16),
+                      ),
+                    )
+                  : _ResultDetail(result: selected!),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ResultListTile extends StatelessWidget {
+  final CompetitionResult result;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _ResultListTile({
+    required this.result,
+    required this.isSelected,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final winner = result.winner;
+    final dateStr = DateFormat('d MMM yyyy  HH:mm').format(result.completedAt);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.orangeBg.withOpacity(0.18)
+                : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.orangeBg.withOpacity(0.6)
+                  : Colors.white12,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Trophy icon
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeBg.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.emoji_events_rounded,
+                    color: AppColors.orangeBg, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      winner?.name ?? '—',
+                      style: GoogleFonts.alexandria(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      dateStr,
+                      style: GoogleFonts.alexandria(
+                          fontSize: 10,
+                          color: Colors.white38,
+                          letterSpacing: 0.3),
+                    ),
+                  ],
+                ),
+              ),
+              // Delete button
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 16, color: Colors.white30),
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete result?'),
+                      content: Text(
+                          'Remove the result from ${dateStr}? This cannot be undone.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) onDelete();
+                },
+                tooltip: 'Delete',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultDetail extends StatelessWidget {
+  final CompetitionResult result;
+
+  const _ResultDetail({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final teams = result.teams
+        .map((s) => Team(
+              id: s.id,
+              name: s.name,
+              color: s.color,
+              score: s.score,
+              section: s.section,
+            ))
+        .toList();
+
+    final dateStr =
+        DateFormat('EEEE, d MMMM yyyy  •  HH:mm').format(result.completedAt);
+
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RESULT',
+            style: GoogleFonts.alexandria(
+              fontSize: 48,
+              fontWeight: FontWeight.w900,
+              color: AppColors.orangeBg,
+              letterSpacing: -1,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            dateStr,
+            style: GoogleFonts.alexandria(
+                fontSize: 13, color: Colors.white38, letterSpacing: 1),
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: teams.isEmpty
+                ? Center(
+                    child: Text('No team data',
+                        style: GoogleFonts.alexandria(color: Colors.white38)))
+                : _SectionedScoreboard(teams: teams),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sectioned scoreboard (shared between current result and history detail) ────
+
 class _SectionedScoreboard extends StatelessWidget {
   final List<Team> teams;
   const _SectionedScoreboard({required this.teams});
 
   static const _sections = [
-    ('اولى وثانية',  const Color(0xFF1565C0), '١ & ٢'),
-    ('ثالثة ورابعة', const Color(0xFF6A1B9A), '٣ & ٤'),
-    ('خامسة وسادسة', const Color(0xFF1B5E20), '٥ & ٦'),
+    ('اولى وثانية', Color(0xFF1565C0), '١ & ٢'),
+    ('ثالثة ورابعة', Color(0xFF6A1B9A), '٣ & ٤'),
+    ('خامسة وسادسة', Color(0xFF1B5E20), '٥ & ٦'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    // Group by section
     final Map<String, List<Team>> grouped = {};
-    for (final (sectionKey, _, __) in _sections) {
-      grouped[sectionKey] = [];
+    for (final (key, _, __) in _sections) {
+      grouped[key] = [];
     }
     final others = <Team>[];
     for (final team in teams) {
@@ -262,7 +591,6 @@ class _SectionedScoreboard extends StatelessWidget {
         others.add(team);
       }
     }
-    // Sort each group by score descending
     for (final list in grouped.values) {
       list.sort((a, b) => b.score.compareTo(a.score));
     }
@@ -282,7 +610,8 @@ class _SectionedScoreboard extends StatelessWidget {
                     subtitle: _sections[i].$1,
                     color: _sections[i].$2,
                     teams: grouped[_sections[i].$1] ?? [],
-                  ).animate(delay: Duration(milliseconds: i * 150))
+                  )
+                      .animate(delay: Duration(milliseconds: i * 150))
                       .fadeIn(duration: 400.ms)
                       .slideY(begin: 0.06, end: 0),
                 ),
@@ -328,9 +657,9 @@ class _GradeSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             decoration: BoxDecoration(
               color: color.withOpacity(0.3),
               borderRadius: const BorderRadius.only(
@@ -341,7 +670,8 @@ class _GradeSection extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(12),
@@ -379,15 +709,14 @@ class _GradeSection extends StatelessWidget {
               ],
             ),
           ),
-
-          // Team rows
           if (teams.isEmpty)
             Padding(
               padding: const EdgeInsets.all(20),
               child: Center(
                 child: Text(
                   'لا توجد فرق',
-                  style: GoogleFonts.alexandria(fontSize: 13, color: Colors.white38),
+                  style: GoogleFonts.alexandria(
+                      fontSize: 13, color: Colors.white38),
                   textDirection: TextDirection.rtl,
                 ),
               ),
@@ -407,21 +736,23 @@ class _GradeSection extends StatelessWidget {
                       .join();
 
                   return Padding(
-                    padding: EdgeInsets.only(bottom: e.key < teams.length - 1 ? 8 : 0),
+                    padding: EdgeInsets.only(
+                        bottom: e.key < teams.length - 1 ? 8 : 0),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         color: isFirst
                             ? color.withOpacity(0.35)
                             : Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
                         border: isFirst
-                            ? Border.all(color: color.withOpacity(0.7), width: 1.5)
+                            ? Border.all(
+                                color: color.withOpacity(0.7), width: 1.5)
                             : null,
                       ),
                       child: Row(
                         children: [
-                          // Rank
                           SizedBox(
                             width: 26,
                             child: Text(
@@ -429,18 +760,19 @@ class _GradeSection extends StatelessWidget {
                               style: GoogleFonts.alexandria(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w900,
-                                color: isFirst ? Colors.white : Colors.white38,
+                                color:
+                                    isFirst ? Colors.white : Colors.white38,
                               ),
                             ),
                           ),
-                          // Avatar
                           Container(
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Color(team.color).withOpacity(0.25),
-                              border: Border.all(color: Color(team.color), width: 2),
+                              border: Border.all(
+                                  color: Color(team.color), width: 2),
                             ),
                             child: Center(
                               child: Text(
@@ -454,19 +786,19 @@ class _GradeSection extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          // Name
                           Expanded(
                             child: Text(
                               team.name,
                               style: GoogleFonts.alexandria(
                                 fontSize: 14,
-                                fontWeight: isFirst ? FontWeight.w800 : FontWeight.w600,
+                                fontWeight: isFirst
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
                                 color: Colors.white,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          // Score
                           if (isFirst)
                             const Icon(Icons.emoji_events_rounded,
                                 size: 16, color: AppColors.orangeBg),
@@ -505,192 +837,18 @@ class _StatChip extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: GoogleFonts.alexandria(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white54, letterSpacing: 1)),
-        Text(value, style: GoogleFonts.alexandria(fontSize: 24, fontWeight: FontWeight.w900, color: valueColor ?? Colors.white)),
+        Text(label,
+            style: GoogleFonts.alexandria(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.white54,
+                letterSpacing: 1)),
+        Text(value,
+            style: GoogleFonts.alexandria(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: valueColor ?? Colors.white)),
       ],
-    );
-  }
-}
-
-// ── Winner card ───────────────────────────────────────────────────────────────
-
-class _WinnerCard extends StatelessWidget {
-  final Team team;
-  const _WinnerCard({required this.team});
-
-  @override
-  Widget build(BuildContext context) {
-    final initials = team.name.split(' ').take(2).map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join();
-    final color = Color(team.color);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.greenLight, width: 2),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white.withOpacity(0.09), Colors.white.withOpacity(0.03)],
-        ),
-        boxShadow: [BoxShadow(color: AppColors.greenLight.withOpacity(0.22), blurRadius: 36, spreadRadius: 2)],
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color.withOpacity(0.2),
-                  border: Border.all(color: AppColors.orangeBg, width: 3),
-                ),
-                child: Center(
-                  child: Text(initials, style: GoogleFonts.alexandria(color: color, fontWeight: FontWeight.w900, fontSize: 28)),
-                ),
-              ),
-              Positioned(
-                top: -8, right: -8,
-                child: Container(
-                  width: 28, height: 28,
-                  decoration: const BoxDecoration(color: AppColors.orangeBg, shape: BoxShape.circle),
-                  child: const Icon(Icons.emoji_events_rounded, size: 16, color: AppColors.orangeDark),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 24),
-
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(color: AppColors.greenSuccess, borderRadius: BorderRadius.circular(20)),
-                      child: Text('THE WINNER', style: GoogleFonts.alexandria(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1, fontStyle: FontStyle.italic)),
-                    ),
-                    const SizedBox(width: 14),
-                    Text('RANK 01', style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white54, letterSpacing: 1)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  team.name,
-                  style: GoogleFonts.alexandria(fontSize: 44, fontWeight: FontWeight.w900, color: Colors.white, height: 1.0),
-                ),
-              ],
-            ),
-          ),
-
-          // Score
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('TOTAL SCORE', style: GoogleFonts.alexandria(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.orangeBg, letterSpacing: 1)),
-              Text(
-                '${team.score}',
-                style: GoogleFonts.alexandria(fontSize: 68, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -2),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Podium card (rank 2 & 3) ──────────────────────────────────────────────────
-
-class _PodiumCard extends StatelessWidget {
-  final Team team;
-  final int rank;
-  const _PodiumCard({required this.team, required this.rank});
-
-  @override
-  Widget build(BuildContext context) {
-    final initials = team.name.split(' ').take(2).map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join();
-    final bgColor = rank == 2 ? AppColors.orangeDark : AppColors.blueContent;
-    final scoreColor = rank == 2 ? AppColors.orangeBg : AppColors.greenLight;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '0$rank',
-            style: GoogleFonts.alexandria(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.white.withOpacity(0.25)),
-          ),
-          const SizedBox(width: 16),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black26,
-              border: Border.all(color: Colors.white38, width: 2),
-            ),
-            child: Center(
-              child: Text(initials, style: GoogleFonts.alexandria(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(team.name, style: GoogleFonts.alexandria(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-          ),
-          Text(
-            '${team.score}',
-            style: GoogleFonts.alexandria(fontSize: 32, fontWeight: FontWeight.w900, color: scoreColor),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Small rank card (rank 4+) ─────────────────────────────────────────────────
-
-class _SmallRankCard extends StatelessWidget {
-  final Team team;
-  final int rank;
-  const _SmallRankCard({required this.team, required this.rank});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '0$rank',
-            style: GoogleFonts.alexandria(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white30),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(team.name, style: GoogleFonts.alexandria(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
-          ),
-          Text(
-            '${team.score}',
-            style: GoogleFonts.alexandria(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white60),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -70,11 +70,18 @@ class QuestionRepositoryImpl implements QuestionRepository {
       final file = File(filePath);
       if (!file.existsSync()) return Left(ImportFailure('File not found: $filePath'));
       final ext = filePath.toLowerCase().split('.').last;
+
+      // Build category name → id map so the CSV can reference categories by name.
+      final catModels = await _dataSource.getCategories();
+      final nameToId = <String, String>{
+        for (final c in catModels) c.name.toLowerCase().trim(): c.id,
+      };
+
       List<Question> questions = [];
       if (ext == 'csv') {
-        questions = await _importFromCsv(file);
+        questions = await _importFromCsv(file, nameToId);
       } else if (ext == 'xlsx' || ext == 'xls') {
-        questions = await _importFromExcel(file);
+        questions = await _importFromExcel(file, nameToId);
       } else {
         return Left(ImportFailure('Unsupported format: $ext'));
       }
@@ -135,11 +142,24 @@ class QuestionRepositoryImpl implements QuestionRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, Unit>> reorderQuestions(List<String> orderedIds) async {
+    try {
+      await _dataSource.reorderQuestions(orderedIds);
+      return const Right(unit);
+    } catch (e) {
+      AppLogger.e('reorderQuestions: $e');
+      return Left(DatabaseFailure(e.toString()));
+    }
+  }
+
   // ── CSV / Excel import helpers ─────────────────────────────────────────────
 
-  Future<List<Question>> _importFromCsv(File file) async {
-    final rows =
-        const CsvToListConverter().convert(await file.readAsString(), eol: '\n');
+  Future<List<Question>> _importFromCsv(
+      File file, Map<String, String> nameToId) async {
+    final raw = await file.readAsString();
+    // Handle both \r\n and \n line endings
+    final rows = const CsvToListConverter().convert(raw, eol: '\n');
     final out = <Question>[];
     for (var i = 1; i < rows.length; i++) {
       final r = rows[i];
@@ -148,14 +168,17 @@ class QuestionRepositoryImpl implements QuestionRepository {
         r[0].toString(), r[1].toString(), r[2].toString(),
         r[3].toString(), r[4].toString(),
         answer: r.length > 5 ? r[5]?.toString() : null,
-        opts: r.length > 6 ? r[6]?.toString() : null,
+        opts:   r.length > 6 ? r[6]?.toString() : null,
+        wrongPts: r.length > 7 ? r[7]?.toString() : null,
+        nameToId: nameToId,
       );
       if (q != null) out.add(q);
     }
     return out;
   }
 
-  Future<List<Question>> _importFromExcel(File file) async {
+  Future<List<Question>> _importFromExcel(
+      File file, Map<String, String> nameToId) async {
     final excel = Excel.decodeBytes(await file.readAsBytes());
     final out = <Question>[];
     for (final table in excel.tables.values) {
@@ -168,8 +191,10 @@ class QuestionRepositoryImpl implements QuestionRepository {
           r[2]?.value?.toString() ?? 'text',
           r[3]?.value?.toString() ?? 'easy',
           r[4]?.value?.toString() ?? '10',
-          answer: r.length > 5 ? r[5]?.value?.toString() : null,
-          opts: r.length > 6 ? r[6]?.value?.toString() : null,
+          answer:   r.length > 5 ? r[5]?.value?.toString() : null,
+          opts:     r.length > 6 ? r[6]?.value?.toString() : null,
+          wrongPts: r.length > 7 ? r[7]?.value?.toString() : null,
+          nameToId: nameToId,
         );
         if (q != null) out.add(q);
       }
@@ -181,24 +206,29 @@ class QuestionRepositoryImpl implements QuestionRepository {
     String text, String cat, String typeStr, String diffStr, String pts, {
     String? answer,
     String? opts,
+    String? wrongPts,
+    required Map<String, String> nameToId,
   }) {
     if (text.trim().isEmpty) return null;
+    // Look up category by name (case-insensitive); fall back to raw string as ID
+    final resolvedCat = nameToId[cat.toLowerCase().trim()] ?? cat.trim();
     final type = QuestionType.values.firstWhere(
-      (t) => t.name.toLowerCase() == typeStr.toLowerCase(),
+      (t) => t.name.toLowerCase() == typeStr.toLowerCase().trim(),
       orElse: () => QuestionType.text,
     );
     final diff = DifficultyLevel.values.firstWhere(
-      (d) => d.name.toLowerCase() == diffStr.toLowerCase(),
+      (d) => d.name.toLowerCase() == diffStr.toLowerCase().trim(),
       orElse: () => DifficultyLevel.easy,
     );
     return Question(
       id: _uuid.v4(),
-      text: text,
-      categoryId: cat,
+      text: text.trim(),
+      categoryId: resolvedCat,
       type: type,
       difficulty: diff,
-      points: int.tryParse(pts) ?? 10,
-      correctAnswer: answer,
+      points: int.tryParse(pts.trim()) ?? 10,
+      wrongPoints: int.tryParse(wrongPts?.trim() ?? '') ?? 1,
+      correctAnswer: (answer?.trim().isEmpty ?? true) ? null : answer?.trim(),
       options: opts
               ?.split(';')
               .map((s) => s.trim())

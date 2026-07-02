@@ -13,6 +13,7 @@ import '../../../../injection/injection.dart';
 import '../../../../services/arduino/arduino_service.dart';
 import '../../../../services/sync/connection_log_service.dart';
 import '../../../../services/sync/supabase_sync_service.dart';
+import '../../../../services/sync/remote_sync_bus.dart';
 import '../../../questions/presentation/bloc/questions_bloc.dart';
 import '../../../teams/presentation/bloc/teams_bloc.dart';
 
@@ -605,6 +606,8 @@ Future<void> _seedData(BuildContext context, {bool force = false}) async {
         duration: const Duration(seconds: 2)),
   );
   await DatabaseSeeder.seed(getIt<DatabaseHelper>(), force: force);
+  // Notify QuestionsBloc to silently refresh without needing an app restart.
+  RemoteSyncBus.instance.notify('questions');
   if (context.mounted) {
     messenger.showSnackBar(
       const SnackBar(

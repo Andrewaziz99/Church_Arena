@@ -19,7 +19,9 @@ class QuestionLocalDataSource {
     if (categoryId != null) { conditions.add('category_id = ?'); args.add(categoryId); }
     if (difficulty != null) { conditions.add('difficulty = ?'); args.add(difficulty); }
     final where = conditions.isEmpty ? null : conditions.join(' AND ');
-    final maps = await db.query('questions', where: where, whereArgs: args.isEmpty ? null : args);
+    final maps = await db.query('questions',
+        where: where, whereArgs: args.isEmpty ? null : args,
+        orderBy: 'sort_order ASC');
     return maps.map(QuestionIsarModel.fromMap).toList();
   }
 
@@ -71,5 +73,20 @@ class QuestionLocalDataSource {
   Future<void> deleteAllQuestions() async {
     final db = await _db.database;
     await db.delete('questions');
+  }
+
+  /// Batch-updates sort_order for each question ID in [orderedIds] order.
+  Future<void> reorderQuestions(List<String> orderedIds) async {
+    final db = await _db.database;
+    final batch = db.batch();
+    for (int i = 0; i < orderedIds.length; i++) {
+      batch.update(
+        'questions',
+        {'sort_order': i},
+        where: 'id = ?',
+        whereArgs: [orderedIds[i]],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 }

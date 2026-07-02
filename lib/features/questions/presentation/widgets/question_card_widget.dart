@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../domain/entities/category.dart';
 import '../../domain/entities/question.dart';
 import '../bloc/questions_bloc.dart';
-import 'question_form_dialog.dart';
 
 class QuestionCardWidget extends StatelessWidget {
   final Question question;
@@ -72,14 +72,8 @@ class QuestionCardWidget extends StatelessWidget {
               children: [
                 IconButton(
                   icon: const Icon(Icons.edit, color: AppColors.primary),
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) => QuestionFormDialog(
-                      categories: categories,
-                      question: question,
-                      blocContext: context,
-                    ),
-                  ),
+                  onPressed: () =>
+                      context.push('/questions/add', extra: question),
                   tooltip: AppStrings.editQuestion,
                 ),
                 IconButton(

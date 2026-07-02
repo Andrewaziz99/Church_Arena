@@ -87,7 +87,7 @@ class _GameScreenState extends State<GameScreen> {
                 context.showSnackBar(state.message, isError: true);
               }
               if (state is GameEnded) {
-                context.read<ScoreboardBloc>().add(LoadScoreboard(state.teams));
+                context.read<ScoreboardBloc>().add(SaveResult(state.teams));
                 context.go('/scoreboard');
               }
               // Red flash on wrong answer

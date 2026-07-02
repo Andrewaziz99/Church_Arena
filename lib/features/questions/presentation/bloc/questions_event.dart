@@ -71,3 +71,28 @@ class _RemoteRefreshQuestions extends QuestionsEvent {
   @override
   List<Object?> get props => [];
 }
+
+/// Triggered by the "Sync from cloud" button.
+/// Pulls all data from Supabase into local SQLite, then reloads.
+class FetchFromCloud extends QuestionsEvent {
+  const FetchFromCloud();
+  @override
+  List<Object?> get props => [];
+}
+
+/// Triggered by the "Upload to cloud" button.
+/// Bulk-upserts all local categories + questions to Supabase.
+class PushToCloud extends QuestionsEvent {
+  const PushToCloud();
+  @override
+  List<Object?> get props => [];
+}
+
+/// Drag-to-reorder: saves new sort_order for each question.
+/// [orderedIds] is the full list of question IDs in the desired display order.
+class ReorderQuestions extends QuestionsEvent {
+  final List<String> orderedIds;
+  const ReorderQuestions(this.orderedIds);
+  @override
+  List<Object?> get props => [orderedIds];
+}

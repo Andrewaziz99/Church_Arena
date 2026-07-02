@@ -25,6 +25,10 @@ class SupabaseRealtimeManager {
   final List<RealtimeChannel> _channels = [];
   bool _started = false;
 
+  // Stored so pullAll() can re-run without needing them passed again.
+  TeamLocalDataSource? _teamDs;
+  QuestionLocalDataSource? _questionDs;
+
   // ── Public API ────────────────────────────────────────────────────────────────
 
   /// Starts realtime sync.  Safe to call multiple times (no-op after first).
@@ -35,6 +39,8 @@ class SupabaseRealtimeManager {
   }) async {
     if (_started || !SupabaseSyncService.instance.isReady) return;
     _started = true;
+    _teamDs = teamDs;
+    _questionDs = questionDs;
 
     _subscribeToTeams(teamDs);
     _subscribeToCategories(questionDs);
@@ -44,6 +50,17 @@ class SupabaseRealtimeManager {
 
     // Run initial pull in background — don't block the caller.
     unawaited(_initialPull(teamDs, questionDs));
+  }
+
+  /// Pull all remote data into local SQLite on demand (e.g. from a UI button).
+  /// Returns the total number of records merged, or -1 if offline/not ready.
+  Future<int> pullAll() async {
+    if (!SupabaseSyncService.instance.isReady) return -1;
+    final tDs = _teamDs;
+    final qDs = _questionDs;
+    if (tDs == null || qDs == null) return -1;
+    await _initialPull(tDs, qDs);
+    return 0; // count logged inside _initialPull
   }
 
   /// Stops all subscriptions.

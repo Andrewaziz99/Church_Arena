@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/teams/presentation/screens/teams_screen.dart';
 import '../features/questions/presentation/screens/questions_screen.dart';
+import '../features/questions/presentation/screens/question_form_screen.dart';
+import '../features/questions/domain/entities/question.dart';
 import '../features/game/presentation/screens/game_screen.dart';
 import '../features/game/presentation/screens/game_setup_screen.dart';
 import '../features/scoreboard/presentation/screens/scoreboard_screen.dart';
@@ -25,6 +27,13 @@ final GoRouter appRouter = GoRouter(
       path: '/questions',
       name: 'questions',
       builder: (_, __) => const QuestionsScreen(),
+    ),
+    GoRoute(
+      path: '/questions/add',
+      name: 'question-add',
+      builder: (_, state) => QuestionFormScreen(
+        question: state.extra as Question?,
+      ),
     ),
     GoRoute(
       path: '/game/setup',

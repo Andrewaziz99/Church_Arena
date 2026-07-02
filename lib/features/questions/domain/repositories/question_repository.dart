@@ -15,4 +15,5 @@ abstract class QuestionRepository {
   Future<Either<Failure, Category>> saveCategory(Category category);
   Future<Either<Failure, Unit>> deleteCategory(String id);
   Future<Either<Failure, Unit>> clearAllQuestions();
+  Future<Either<Failure, Unit>> reorderQuestions(List<String> orderedIds);
 }

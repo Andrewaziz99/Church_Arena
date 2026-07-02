@@ -1,0 +1,15 @@
+text,category_name,type,difficulty,points,correct_answer,options,wrong_points
+Who built the ark?,Bible Knowledge,text,easy,10,Noah,Adam;Moses;Noah;Abraham,1
+How many disciples did Jesus have?,Bible Knowledge,text,easy,10,12,10;11;12;13,1
+In which city was Jesus born?,Bible Knowledge,text,medium,15,Bethlehem,Jerusalem;Nazareth;Bethlehem;Jericho,2
+Who wrote the book of Psalms (mostly)?,Bible Knowledge,text,medium,15,David,Solomon;Moses;David;Isaiah,2
+How many days was Jonah inside the fish?,Bible Knowledge,text,hard,20,3,1;2;3;7,3
+What is the first book of the Bible?,Bible Knowledge,text,easy,10,Genesis,Genesis;Exodus;Psalms;Revelation,1
+Who baptized Jesus?,New Testament,text,easy,10,John the Baptist,Peter;Paul;John the Baptist;Matthew,1
+How many books are in the New Testament?,New Testament,text,medium,15,27,24;26;27;29,2
+Who denied Jesus three times?,New Testament,text,easy,10,Peter,Judas;Peter;Thomas;James,1
+What is the last book of the Bible?,New Testament,text,easy,10,Revelation,Acts;Hebrews;Jude;Revelation,1
+Who was swallowed by a big fish?,Old Testament,text,easy,10,Jonah,Elijah;Jonah;Daniel;Noah,1
+How many plagues were sent to Egypt?,Old Testament,text,medium,15,10,7;9;10;12,2
+Who killed Goliath?,Old Testament,text,easy,10,David,Saul;David;Solomon;Jonathan,1
+What is the longest book in the Bible?,Old Testament,text,hard,20,Psalms,Genesis;Isaiah;Jeremiah;Psalms,3

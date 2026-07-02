@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,7 +11,6 @@ import '../../domain/entities/category.dart';
 import '../../domain/entities/question.dart';
 import '../bloc/questions_bloc.dart';
 import '../widgets/question_card_widget.dart';
-import '../widgets/question_form_dialog.dart';
 
 class QuestionsScreen extends StatefulWidget {
   const QuestionsScreen({super.key});
@@ -34,6 +34,39 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         title: const Text(AppStrings.questions),
         leading: BackButton(onPressed: () => context.go('/')),
         actions: [
+          // ── Pull: cloud → local ───────────────────────────────────────────
+          TextButton.icon(
+            onPressed: () =>
+                context.read<QuestionsBloc>().add(const FetchFromCloud()),
+            icon: const Icon(Icons.cloud_download_rounded,
+                color: AppColors.greenSuccess),
+            label: const Text(
+              'Pull from Cloud',
+              style: TextStyle(color: AppColors.greenSuccess),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // ── Push: local → cloud ───────────────────────────────────────────
+          TextButton.icon(
+            onPressed: () =>
+                context.read<QuestionsBloc>().add(const PushToCloud()),
+            icon: const Icon(Icons.cloud_upload_rounded,
+                color: AppColors.orangeBg),
+            label: const Text(
+              'Push to Cloud',
+              style: TextStyle(color: AppColors.orangeBg),
+            ),
+          ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            onPressed: () => _downloadTemplate(context),
+            icon: const Icon(Icons.download_rounded, color: AppColors.blueContent),
+            label: const Text(
+              'Get Template',
+              style: TextStyle(color: AppColors.blueContent),
+            ),
+          ),
+          const SizedBox(width: 4),
           TextButton.icon(
             onPressed: () => _importQuestions(context),
             icon: const Icon(Icons.upload_file, color: AppColors.primary),
@@ -62,11 +95,30 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
             context.showSnackBar(
               '${AppStrings.imported} ${state.count} ${AppStrings.questions_}',
             );
+          } else if (state is QuestionsPushed) {
+            context.showSnackBar(
+              'Uploaded ${state.categoriesCount} categories and '
+              '${state.questionsCount} questions to cloud ☁️',
+            );
           }
         },
         builder: (context, state) {
-          if (state is QuestionsLoading || state is QuestionsImporting) {
-            return const Center(child: CircularProgressIndicator());
+          if (state is QuestionsLoading ||
+              state is QuestionsImporting ||
+              state is QuestionsPushing) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (state is QuestionsPushing) ...[
+                    const SizedBox(height: 16),
+                    const Text('Uploading to cloud…',
+                        style: TextStyle(color: AppColors.textSecondary)),
+                  ],
+                ],
+              ),
+            );
           }
           if (state is QuestionsLoaded) {
             return Row(
@@ -81,6 +133,7 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
                     questions: state.filteredQuestions,
                     categories: state.categories,
                     filterDifficulty: state.filterDifficulty,
+                    filterCategoryId: state.filterCategory,
                   ),
                 ),
               ],
@@ -95,6 +148,28 @@ class _QuestionsScreenState extends State<QuestionsScreen> {
         },
       ),
     );
+  }
+
+  static const _templateCsv =
+      'text,category_name,type,difficulty,points,correct_answer,options,wrong_points\n'
+      'Who built the ark?,Bible Knowledge,text,easy,10,Noah,Adam;Moses;Noah;Abraham,1\n'
+      'How many disciples did Jesus have?,Bible Knowledge,text,easy,10,12,10;11;12;13,1\n'
+      'In which city was Jesus born?,Bible Knowledge,text,medium,15,Bethlehem,'
+      'Jerusalem;Nazareth;Bethlehem;Jericho,2\n'
+      'Who killed Goliath?,Bible Knowledge,text,easy,10,David,Saul;David;Solomon;Jonathan,1\n';
+
+  Future<void> _downloadTemplate(BuildContext context) async {
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Questions Template',
+      fileName: 'questions_template.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (savePath == null) return;
+    await File(savePath).writeAsString(_templateCsv);
+    if (context.mounted) {
+      context.showSnackBar('Template saved — fill it in and import with "Import CSV"');
+    }
   }
 
   Future<void> _importQuestions(BuildContext context) async {
@@ -331,18 +406,49 @@ class _QuestionsPanel extends StatelessWidget {
   final List<Question> questions;
   final List<Category> categories;
   final DifficultyLevel? filterDifficulty;
+  final String? filterCategoryId;
 
   const _QuestionsPanel({
     required this.questions,
     required this.categories,
     this.filterDifficulty,
+    this.filterCategoryId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final selectedCat = filterCategoryId == null
+        ? null
+        : categories.where((c) => c.id == filterCategoryId).firstOrNull;
+    final isR3 = selectedCat?.roundType == 'r3';
+
     return Column(
       children: [
-        _DifficultyFilterBar(selected: filterDifficulty),
+        // Reorder hint banner for تحت الضغط categories
+        if (isR3)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: AppColors.orangeBg.withOpacity(0.10),
+            child: Row(
+              children: [
+                const Icon(Icons.drag_handle_rounded,
+                    size: 16, color: AppColors.orangeBg),
+                const SizedBox(width: 8),
+                Text(
+                  'اسحب الأسئلة لتغيير ترتيبها في الجولة',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.orangeBg,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textDirection: TextDirection.rtl,
+                ),
+              ],
+            ),
+          )
+        else
+          _DifficultyFilterBar(selected: filterDifficulty),
         Expanded(
           child: questions.isEmpty
               ? const Center(
@@ -351,16 +457,125 @@ class _QuestionsPanel extends StatelessWidget {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: questions.length,
-                  itemBuilder: (context, index) => QuestionCardWidget(
-                    question: questions[index],
-                    categories: categories,
+              : isR3
+                  ? _ReorderableQuestionList(
+                      questions: questions,
+                      categories: categories,
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: questions.length,
+                      itemBuilder: (context, index) => QuestionCardWidget(
+                        question: questions[index],
+                        categories: categories,
+                      ),
+                    ),
+        ),
+        const _AddQuestionButton(),
+      ],
+    );
+  }
+}
+
+class _ReorderableQuestionList extends StatelessWidget {
+  final List<Question> questions;
+  final List<Category> categories;
+
+  const _ReorderableQuestionList({
+    required this.questions,
+    required this.categories,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: questions.length,
+      buildDefaultDragHandles: false,
+      onReorder: (oldIndex, newIndex) {
+        // Flutter's ReorderableListView passes newIndex after removal,
+        // so adjust when moving downward.
+        final adjusted = newIndex > oldIndex ? newIndex - 1 : newIndex;
+        final reordered = List<Question>.from(questions);
+        final item = reordered.removeAt(oldIndex);
+        reordered.insert(adjusted, item);
+        context
+            .read<QuestionsBloc>()
+            .add(ReorderQuestions(reordered.map((q) => q.id).toList()));
+      },
+      itemBuilder: (context, index) {
+        final question = questions[index];
+        return _DraggableQuestionCard(
+          key: ValueKey(question.id),
+          question: question,
+          categories: categories,
+          index: index,
+        );
+      },
+    );
+  }
+}
+
+class _DraggableQuestionCard extends StatelessWidget {
+  final Question question;
+  final List<Category> categories;
+  final int index;
+
+  const _DraggableQuestionCard({
+    super.key,
+    required this.question,
+    required this.categories,
+    required this.index,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Rank number + drag handle stacked vertically
+        Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 12, right: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeBg.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.orangeBg.withOpacity(0.4)),
+                ),
+                child: Center(
+                  child: Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.orangeBg,
+                    ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 4),
+              ReorderableDragStartListener(
+                index: index,
+                child: const Icon(
+                  Icons.drag_handle_rounded,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
         ),
-        _AddQuestionButton(categories: categories),
+        Expanded(
+          child: QuestionCardWidget(
+            question: question,
+            categories: categories,
+          ),
+        ),
       ],
     );
   }
@@ -401,8 +616,7 @@ class _DifficultyFilterBar extends StatelessWidget {
 }
 
 class _AddQuestionButton extends StatelessWidget {
-  final List<Category> categories;
-  const _AddQuestionButton({required this.categories});
+  const _AddQuestionButton();
 
   @override
   Widget build(BuildContext context) {
@@ -410,18 +624,19 @@ class _AddQuestionButton extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Align(
         alignment: Alignment.bottomRight,
-        child: FloatingActionButton.extended(
-          onPressed: () => showDialog(
-            context: context,
-            builder: (_) => QuestionFormDialog(
-              categories: categories,
-              blocContext: context,
+        child: ElevatedButton.icon(
+          onPressed: () => context.push('/questions/add'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
-          backgroundColor: AppColors.accent,
-          foregroundColor: AppColors.background,
-          icon: const Icon(Icons.add,color: Colors.black,),
-          label: const Text(AppStrings.addQuestion, style: TextStyle(color: Colors.black),),
+          icon: const Icon(Icons.add, color: Colors.black),
+          label: const Text(AppStrings.addQuestion,
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700)),
         ),
       ),
     );
