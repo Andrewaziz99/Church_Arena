@@ -261,6 +261,7 @@ class _QuestionFormScreenState extends State<QuestionFormScreen> {
                         else
                           DropdownButtonFormField<String>(
                             value: _categoryId,
+                            isExpanded: true,
                             decoration:
                                 const InputDecoration(labelText: 'Category'),
                             items: categories
@@ -286,6 +287,7 @@ class _QuestionFormScreenState extends State<QuestionFormScreen> {
                         _SectionLabel('Type'),
                         DropdownButtonFormField<QuestionType>(
                           value: _type,
+                          isExpanded: true,
                           decoration:
                               const InputDecoration(labelText: 'Question type'),
                           items: QuestionType.values
@@ -314,6 +316,7 @@ class _QuestionFormScreenState extends State<QuestionFormScreen> {
                         _SectionLabel('Difficulty'),
                         DropdownButtonFormField<DifficultyLevel>(
                           value: _difficulty,
+                          isExpanded: true,
                           decoration:
                               const InputDecoration(labelText: 'Difficulty'),
                           items: DifficultyLevel.values

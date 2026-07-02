@@ -2,47 +2,43 @@
 import 'package:get_it/get_it.dart';
 
 import '../core/database/database_helper.dart';
-import '../services/arduino/arduino_service.dart';
-import '../services/audio/audio_service.dart';
-
-// ── Teams ──────────────────────────────────────────────────────────────────────
-import '../features/teams/data/datasources/team_local_datasource.dart';
-import '../features/teams/data/repositories/team_repository_impl.dart';
-import '../features/teams/domain/repositories/team_repository.dart';
-import '../features/teams/domain/usecases/get_teams_usecase.dart';
-import '../features/teams/domain/usecases/save_team_usecase.dart';
-import '../features/teams/domain/usecases/delete_team_usecase.dart';
-import '../features/teams/domain/usecases/update_score_usecase.dart';
-import '../features/teams/domain/usecases/reset_score_usecase.dart';
-import '../features/teams/presentation/bloc/teams_bloc.dart';
-
-// ── Questions ──────────────────────────────────────────────────────────────────
-import '../features/questions/data/datasources/question_local_datasource.dart';
-import '../features/questions/data/repositories/question_repository_impl.dart';
-import '../features/questions/domain/repositories/question_repository.dart';
-import '../features/questions/domain/usecases/get_questions_usecase.dart';
-import '../features/questions/domain/usecases/save_question_usecase.dart';
-import '../features/questions/domain/usecases/delete_question_usecase.dart';
-import '../features/questions/domain/usecases/import_questions_usecase.dart';
-import '../features/questions/domain/usecases/get_categories_usecase.dart';
-import '../features/questions/domain/usecases/save_category_usecase.dart';
-import '../features/questions/domain/usecases/clear_all_questions_usecase.dart';
-import '../features/questions/presentation/bloc/questions_bloc.dart';
-
 // ── Game ───────────────────────────────────────────────────────────────────────
 import '../features/game/data/repositories/game_repository_impl.dart';
 import '../features/game/domain/repositories/game_repository.dart';
 import '../features/game/presentation/bloc/game_bloc.dart';
-
+// ── Questions ──────────────────────────────────────────────────────────────────
+import '../features/questions/data/datasources/question_local_datasource.dart';
+import '../features/questions/data/repositories/question_repository_impl.dart';
+import '../features/questions/domain/repositories/question_repository.dart';
+import '../features/questions/domain/usecases/clear_all_questions_usecase.dart';
+import '../features/questions/domain/usecases/delete_question_usecase.dart';
+import '../features/questions/domain/usecases/get_categories_usecase.dart';
+import '../features/questions/domain/usecases/get_questions_usecase.dart';
+import '../features/questions/domain/usecases/import_questions_usecase.dart';
+import '../features/questions/domain/usecases/reorder_questions_usecase.dart';
+import '../features/questions/domain/usecases/save_category_usecase.dart';
+import '../features/questions/domain/usecases/save_question_usecase.dart';
+import '../features/questions/presentation/bloc/questions_bloc.dart';
+// ── Scoreboard ─────────────────────────────────────────────────────────────────
+import '../features/scoreboard/presentation/bloc/scoreboard_bloc.dart';
 // ── Settings ───────────────────────────────────────────────────────────────────
 import '../features/settings/data/repositories/settings_repository_impl.dart';
 import '../features/settings/domain/repositories/settings_repository.dart';
 import '../features/settings/domain/usecases/get_settings_usecase.dart';
 import '../features/settings/domain/usecases/save_settings_usecase.dart';
 import '../features/settings/presentation/bloc/settings_bloc.dart';
-
-// ── Scoreboard ─────────────────────────────────────────────────────────────────
-import '../features/scoreboard/presentation/bloc/scoreboard_bloc.dart';
+// ── Teams ──────────────────────────────────────────────────────────────────────
+import '../features/teams/data/datasources/team_local_datasource.dart';
+import '../features/teams/data/repositories/team_repository_impl.dart';
+import '../features/teams/domain/repositories/team_repository.dart';
+import '../features/teams/domain/usecases/delete_team_usecase.dart';
+import '../features/teams/domain/usecases/get_teams_usecase.dart';
+import '../features/teams/domain/usecases/reset_score_usecase.dart';
+import '../features/teams/domain/usecases/save_team_usecase.dart';
+import '../features/teams/domain/usecases/update_score_usecase.dart';
+import '../features/teams/presentation/bloc/teams_bloc.dart';
+import '../services/arduino/arduino_service.dart';
+import '../services/audio/audio_service.dart';
 
 void $initGetIt(GetIt g) {
   // Core
@@ -132,6 +128,10 @@ void $initGetIt(GetIt g) {
     g.registerLazySingleton<ClearAllQuestionsUseCase>(
         () => ClearAllQuestionsUseCase(g<QuestionRepository>()));
   }
+  if (!g.isRegistered<ReorderQuestionsUseCase>()) {
+    g.registerLazySingleton<ReorderQuestionsUseCase>(
+        () => ReorderQuestionsUseCase(g<QuestionRepository>()));
+  }
   if (!g.isRegistered<QuestionsBloc>()) {
     g.registerFactory<QuestionsBloc>(() => QuestionsBloc(
           getQuestions: g<GetQuestionsUseCase>(),
@@ -141,6 +141,7 @@ void $initGetIt(GetIt g) {
           getCategories: g<GetCategoriesUseCase>(),
           saveCategory: g<SaveCategoryUseCase>(),
           clearAllQuestions: g<ClearAllQuestionsUseCase>(),
+          reorderQuestions: g<ReorderQuestionsUseCase>(),
         ));
   }
 
@@ -158,8 +159,7 @@ void $initGetIt(GetIt g) {
 
   // Settings
   if (!g.isRegistered<SettingsRepository>()) {
-    g.registerLazySingleton<SettingsRepository>(
-        () => SettingsRepositoryImpl());
+    g.registerLazySingleton<SettingsRepository>(() => SettingsRepositoryImpl());
   }
   if (!g.isRegistered<GetSettingsUseCase>()) {
     g.registerLazySingleton<GetSettingsUseCase>(
