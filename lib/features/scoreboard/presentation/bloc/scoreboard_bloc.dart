@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../features/teams/domain/entities/team.dart';
+import '../../../../services/sync/supabase_sync_service.dart';
 import '../../../scoreboard/data/result_local_datasource.dart';
 import '../../../scoreboard/domain/competition_result.dart';
 
@@ -35,6 +37,8 @@ class ScoreboardBloc extends Bloc<ScoreboardEvent, ScoreboardState> {
     try {
       await _ds.save(result);
     } catch (_) {}
+    // Push to Supabase in the background — don't block the UI.
+    unawaited(SupabaseSyncService.instance.syncResultUp(result));
     final history = await _loadHistory();
     emit(ScoreboardLoaded(
       rankedTeams: sorted,
@@ -58,6 +62,20 @@ class ScoreboardBloc extends Bloc<ScoreboardEvent, ScoreboardState> {
     Emitter<ScoreboardState> emit,
   ) async {
     emit(const ScoreboardHistory(loading: true));
+
+    // Pull from Supabase and merge any results that aren't in local SQLite yet.
+    final remote = await SupabaseSyncService.instance.fetchResults();
+    if (remote.isNotEmpty) {
+      final localIds = (await _ds.getAll()).map((r) => r.id).toSet();
+      for (final r in remote) {
+        if (!localIds.contains(r.id)) {
+          try {
+            await _ds.save(r);
+          } catch (_) {}
+        }
+      }
+    }
+
     final history = await _loadHistory();
     emit(ScoreboardHistory(history: history));
   }
@@ -67,6 +85,7 @@ class ScoreboardBloc extends Bloc<ScoreboardEvent, ScoreboardState> {
     Emitter<ScoreboardState> emit,
   ) async {
     await _ds.delete(event.id);
+    unawaited(SupabaseSyncService.instance.deleteResultRemote(event.id));
     final history = await _loadHistory();
     // Stay in history view after delete
     if (state is ScoreboardLoaded) {

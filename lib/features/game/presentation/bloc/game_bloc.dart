@@ -30,6 +30,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
   // ── Pending round data (stored at competition start, consumed on transition) ─
   List<Question>? _pendingR2Questions;
   int _pendingR2Timer = 20;
+  int _pendingR2QuestionsPerPair = 3;
   List<Question>? _pendingR3Questions;
   int _pendingR3SharedTimer = 45;
   List<int>? _pendingContestantsPerTeam;
@@ -200,13 +201,18 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
   Future<void> _advanceR2Pair(
       GameSession session, Emitter<GameState> emit) async {
-    final nextPairIdx = session.currentPairIndex + 1;
+    final qpp = session.r2QuestionsPerPair;
+    final nextQIdx = session.currentQuestionIndex + 1;
+    final nextPairIdx = nextQIdx ~/ qpp;
+
     if (nextPairIdx >= session.totalPairs) {
+      // All pairs done → round 2 over
       emit(GameRoundTransition(session.teams, 2));
-    } else {
+    } else if (nextPairIdx > session.currentPairIndex) {
+      // Moved to a new pair — show pair intro screen
       final updated = session.copyWith(
         currentPairIndex: nextPairIdx,
-        currentQuestionIndex: nextPairIdx,
+        currentQuestionIndex: nextQIdx,
         buzzedTeamId: null,
         firstWrongTeamId: null,
         timerRemaining: session.timerSeconds,
@@ -214,6 +220,17 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       await repository.saveSession(updated);
       arduinoService.resetBuzzers();
       emit(GamePairDisplay(updated));
+    } else {
+      // Same pair, next question — go straight to waiting for buzz
+      final updated = session.copyWith(
+        currentQuestionIndex: nextQIdx,
+        buzzedTeamId: null,
+        firstWrongTeamId: null,
+        timerRemaining: session.timerSeconds,
+      );
+      await repository.saveSession(updated);
+      arduinoService.resetBuzzers();
+      emit(GameWaitingBuzz(updated));
     }
   }
 
@@ -297,6 +314,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     // Stash R2 + R3 data for later transitions
     _pendingR2Questions = event.round2Questions;
     _pendingR2Timer = event.round2Timer;
+    _pendingR2QuestionsPerPair = event.r2QuestionsPerPair;
     _pendingR3Questions = event.round3Questions;
     _pendingR3SharedTimer = event.sharedTimer;
     _pendingContestantsPerTeam = event.contestantsPerTeam;
@@ -435,6 +453,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       roundNumber: 2,
       teamPairsList: pairsList,
       currentPairIndex: 0,
+      r2QuestionsPerPair: _pendingR2QuestionsPerPair,
     );
     await repository.saveSession(session);
     _syncSession(session);

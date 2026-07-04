@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' hide Category;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/questions/domain/entities/category.dart';
 import '../../features/questions/domain/entities/question.dart';
+import '../../features/scoreboard/domain/competition_result.dart';
 import '../../features/teams/domain/entities/team.dart';
 import 'connection_log_service.dart';
 
@@ -82,7 +83,7 @@ class SupabaseSyncService {
   Future<void> syncTeamUp(Team team) async {
     if (!_ready()) return;
     try {
-      await _client.from('teams').upsert(_teamRow(team));
+      await _client.from('teams').upsert(_teamRow(team), onConflict: 'id');
       _online = true;
     } catch (e) {
       _online = false;
@@ -95,7 +96,7 @@ class SupabaseSyncService {
   Future<void> syncTeamsUp(List<Team> teams) async {
     if (!_ready()) return;
     try {
-      await _client.from('teams').upsert(teams.map(_teamRow).toList());
+      await _client.from('teams').upsert(teams.map(_teamRow).toList(), onConflict: 'id');
       _online = true;
       _log.log('Teams synced ↑ (${teams.length})', level: LogLevel.success);
     } catch (e) {
@@ -147,7 +148,7 @@ class SupabaseSyncService {
   Future<void> syncCategoryUp(Category category) async {
     if (!_ready()) return;
     try {
-      await _client.from('categories').upsert(_categoryRow(category));
+      await _client.from('categories').upsert(_categoryRow(category), onConflict: 'id');
       _online = true;
     } catch (e) {
       _online = false;
@@ -158,7 +159,7 @@ class SupabaseSyncService {
   Future<void> syncCategoriesUp(List<Category> categories) async {
     if (!_ready()) return;
     try {
-      await _client.from('categories').upsert(categories.map(_categoryRow).toList());
+      await _client.from('categories').upsert(categories.map(_categoryRow).toList(), onConflict: 'id');
       _online = true;
       _log.log('Categories synced ↑ (${categories.length})', level: LogLevel.success);
     } catch (e) {
@@ -194,7 +195,7 @@ class SupabaseSyncService {
   Future<void> syncQuestionUp(Question question) async {
     if (!_ready()) return;
     try {
-      await _client.from('questions').upsert(_questionRow(question));
+      await _client.from('questions').upsert(_questionRow(question), onConflict: 'id');
       _online = true;
     } catch (e) {
       _online = false;
@@ -205,7 +206,7 @@ class SupabaseSyncService {
   Future<void> syncQuestionsUp(List<Question> questions) async {
     if (!_ready()) return;
     try {
-      await _client.from('questions').upsert(questions.map(_questionRow).toList());
+      await _client.from('questions').upsert(questions.map(_questionRow).toList(), onConflict: 'id');
       _online = true;
       _log.log('Questions synced ↑ (${questions.length})', level: LogLevel.success);
     } catch (e) {
@@ -270,7 +271,7 @@ class SupabaseSyncService {
         'buzzed_team_id': buzzedTeamId,
         'timer_remaining': timerRemaining,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'id');
       _online = true;
     } catch (e) {
       _online = false;
@@ -294,6 +295,83 @@ class SupabaseSyncService {
       });
     } catch (e) {
       _log.log('publishEvent error: $e', level: LogLevel.error);
+    }
+  }
+
+  // ── Competition Results ───────────────────────────────────────────────────────
+
+  /// Bulk-upsert all competition results (used by "Sync All Data" on dashboard).
+  Future<void> syncResultsUp(List<CompetitionResult> results) async {
+    if (!_ready() || results.isEmpty) return;
+    try {
+      await _client.from('competition_results').upsert(
+        results
+            .map((r) => {
+                  'id': r.id,
+                  'completed_at': r.completedAt.toIso8601String(),
+                  'teams_json': r.teamsJson,
+                })
+            .toList(),
+        onConflict: 'id',
+      );
+      _online = true;
+      _log.log('Results synced ↑ (${results.length})', level: LogLevel.success);
+    } catch (e) {
+      _online = false;
+      _log.log('syncResultsUp error: $e', level: LogLevel.error);
+    }
+  }
+
+  /// Push one competition result to Supabase (fire-and-forget after a game ends).
+  Future<void> syncResultUp(CompetitionResult result) async {
+    if (!_ready()) return;
+    try {
+      await _client.from('competition_results').upsert({
+        'id': result.id,
+        'completed_at': result.completedAt.toIso8601String(),
+        'teams_json': result.teamsJson,
+      }, onConflict: 'id');
+      _online = true;
+      _log.log('Result synced ↑ ${result.id}', level: LogLevel.success);
+    } catch (e) {
+      _online = false;
+      _log.log('syncResultUp error: $e', level: LogLevel.error);
+    }
+  }
+
+  /// Pull all competition results from Supabase, newest first.
+  Future<List<CompetitionResult>> fetchResults() async {
+    if (!_ready()) return [];
+    try {
+      final data = await _client
+          .from('competition_results')
+          .select()
+          .order('completed_at', ascending: false);
+      _online = true;
+      _log.log('Fetched ${(data as List).length} results ↓', level: LogLevel.info);
+      return (data as List<dynamic>).map((r) {
+        final row = r as Map<String, dynamic>;
+        return CompetitionResult.fromMap({
+          'id': row['id'] as String,
+          'completed_at': row['completed_at'] as String,
+          'teams_json': row['teams_json'] as String,
+        });
+      }).toList();
+    } catch (e) {
+      _online = false;
+      _log.log('fetchResults error: $e', level: LogLevel.error);
+      return [];
+    }
+  }
+
+  /// Delete a competition result from Supabase.
+  Future<void> deleteResultRemote(String id) async {
+    if (!_ready()) return;
+    try {
+      await _client.from('competition_results').delete().eq('id', id);
+      _log.log('Result deleted ↑ $id', level: LogLevel.info);
+    } catch (e) {
+      _log.log('deleteResultRemote error: $e', level: LogLevel.error);
     }
   }
 
@@ -402,6 +480,7 @@ class SupabaseSyncService {
         'difficulty': q.difficulty.name,
         'points': q.points,
         'wrong_points': q.wrongPoints,
+        'sort_order': q.sortOrder,
         'media_path': q.mediaPath,
         'correct_answer': q.correctAnswer,
         'options': q.options.join(';'),

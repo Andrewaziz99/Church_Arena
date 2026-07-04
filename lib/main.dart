@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:church_arena/services/sync/supabase_sync_service.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:window_manager/window_manager.dart';
@@ -8,12 +10,31 @@ import 'core/database/database_helper.dart';
 import 'core/utils/app_logger.dart';
 import 'features/questions/data/datasources/question_local_datasource.dart';
 import 'features/teams/data/datasources/team_local_datasource.dart';
+import 'features/tv/tv_app.dart';
 import 'injection/injection.dart';
 import 'services/audio/audio_service.dart';
 import 'services/sync/supabase_realtime_manager.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── TV sub-window ─────────────────────────────────────────────────────────
+  // desktop_multi_window spawns a second Flutter engine with these args.
+  // Skip all main-window initialisation and just show the presenter screen.
+  if (args.firstOrNull == 'multi_window') {
+    final windowId = int.parse(args[1]);
+    final argument = args.length > 2 && args[2].isNotEmpty
+        ? jsonDecode(args[2]) as Map<String, dynamic>
+        : <String, dynamic>{};
+    if (argument['window'] == 'tv') {
+      // TV sub-window: TvWindowService.open() already positions the window
+      // to cover the full display via WindowController.setFrame.
+      // window_manager throws MissingPluginException in sub-windows, so
+      // we must NOT call it here.
+      runApp(TvApp(windowId: windowId));
+      return;
+    }
+  }
 
   await windowManager.ensureInitialized();
   const WindowOptions windowOptions = WindowOptions(

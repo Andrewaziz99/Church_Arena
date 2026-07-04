@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:injectable/injectable.dart';
@@ -76,9 +78,10 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   ) async {
     final currentState = state;
     if (currentState is! SettingsLoaded) return;
-    final isFullscreen = await windowManager.isFullScreen();
-    await windowManager.setFullScreen(!isFullscreen);
-    final updated = currentState.settings.copyWith(isFullscreen: !isFullscreen);
+    // Fire-and-forget — don't await the OS window transition.
+    // This lets the UI stay responsive while Windows animates.
+    unawaited(windowManager.setFullScreen(event.value));
+    final updated = currentState.settings.copyWith(isFullscreen: event.value);
     add(SaveSettings(updated));
   }
 }

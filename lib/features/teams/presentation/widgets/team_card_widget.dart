@@ -108,13 +108,51 @@ class _TeamCardWidgetState extends State<TeamCardWidget> {
 
             // ── Members ────────────────────────────────────────
             if (widget.team.members.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.people_alt_rounded, size: 12, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'MEMBERS (${widget.team.members.length})',
+                    style: GoogleFonts.alexandria(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
-              Text(
-                widget.team.members.take(3).join(' · '),
-                style: GoogleFonts.alexandria(fontSize: 10, color: AppColors.textSecondary),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textDirection: TextDirection.rtl,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 76),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: widget.team.members.map((member) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: teamColor.withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: teamColor.withOpacity(0.30), width: 1),
+                        ),
+                        child: Text(
+                          member,
+                          style: GoogleFonts.alexandria(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: teamColor.withOpacity(0.85),
+                          ),
+                          textDirection: TextDirection.rtl,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
             ],
 

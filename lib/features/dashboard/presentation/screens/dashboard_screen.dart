@@ -1,10 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/database_seeder.dart';
@@ -12,9 +14,11 @@ import '../../../../core/widgets/app_nav_sidebar.dart';
 import '../../../../injection/injection.dart';
 import '../../../../services/arduino/arduino_service.dart';
 import '../../../../services/sync/connection_log_service.dart';
-import '../../../../services/sync/supabase_sync_service.dart';
 import '../../../../services/sync/remote_sync_bus.dart';
+import '../../../../services/sync/supabase_sync_service.dart';
+import '../../../../services/tv/tv_window_service.dart';
 import '../../../questions/presentation/bloc/questions_bloc.dart';
+import '../../../scoreboard/data/result_local_datasource.dart';
 import '../../../teams/presentation/bloc/teams_bloc.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -52,6 +56,7 @@ class _DashboardContentState extends State<_DashboardContent> {
   bool _arduinoConnected = false;
   Duration _sessionTime = Duration.zero;
   final DateTime _sessionStart = DateTime.now();
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -90,6 +95,80 @@ class _DashboardContentState extends State<_DashboardContent> {
     super.dispose();
   }
 
+  Future<void> _syncAllData(BuildContext context) async {
+    if (_isSyncing) return;
+    if (!_isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('غير متصل — تحقق من الاتصال بالإنترنت'),
+          backgroundColor: Color(0xFFD32F2F),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    setState(() => _isSyncing = true);
+    int teamCount = 0;
+    int catCount = 0;
+    int qCount = 0;
+    int resultCount = 0;
+    try {
+      // 1. Teams (includes live scores)
+      final teamsState = context.read<TeamsBloc>().state;
+      if (teamsState is TeamsLoaded && teamsState.teams.isNotEmpty) {
+        await SupabaseSyncService.instance.syncTeamsUp(teamsState.teams);
+        teamCount = teamsState.teams.length;
+      }
+
+      // 2. Categories + Questions
+      final questionsState = context.read<QuestionsBloc>().state;
+      if (questionsState is QuestionsLoaded) {
+        if (questionsState.categories.isNotEmpty) {
+          await SupabaseSyncService.instance
+              .syncCategoriesUp(questionsState.categories);
+          catCount = questionsState.categories.length;
+        }
+        if (questionsState.questions.isNotEmpty) {
+          await SupabaseSyncService.instance
+              .syncQuestionsUp(questionsState.questions);
+          qCount = questionsState.questions.length;
+        }
+      }
+
+      // 3. Competition history (scoreboard)
+      final results = await ResultLocalDataSource.instance.getAll();
+      if (results.isNotEmpty) {
+        await SupabaseSyncService.instance.syncResultsUp(results);
+        resultCount = results.length;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅  تمت المزامنة — '
+              '$teamCount فريق · $catCount فئة · $qCount سؤال · $resultCount نتيجة',
+              textDirection: TextDirection.rtl,
+            ),
+            backgroundColor: AppColors.greenSuccess,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل المزامنة: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   String _formatDuration(Duration d) {
     final h = d.inHours.toString().padLeft(2, '0');
     final m = (d.inMinutes % 60).toString().padLeft(2, '0');
@@ -103,15 +182,12 @@ class _DashboardContentState extends State<_DashboardContent> {
       builder: (context, teamsState) {
         return BlocBuilder<QuestionsBloc, QuestionsState>(
           builder: (context, questionsState) {
-            final teamCount = teamsState is TeamsLoaded
-                ? '${teamsState.teams.length}'
-                : '—';
+            final teamCount =
+                teamsState is TeamsLoaded ? '${teamsState.teams.length}' : '—';
             final qCount = questionsState is QuestionsLoaded
                 ? '${questionsState.questions.length}'
                 : '—';
-            final latencyLabel = _latencyMs == null
-                ? '—'
-                : '${_latencyMs}ms';
+            final latencyLabel = _latencyMs == null ? '—' : '${_latencyMs}ms';
             final syncLabel = _isOnline ? 'ONLINE' : 'OFFLINE';
             final syncColor =
                 _isOnline ? AppColors.greenSuccess : const Color(0xFFD32F2F);
@@ -281,8 +357,7 @@ class _DashboardContentState extends State<_DashboardContent> {
                         label: 'START FESTIVAL',
                         icon: Icons.play_arrow_rounded,
                         primary: true,
-                        onTap: () =>
-                            context.go('/game/setup?category='),
+                        onTap: () => context.go('/game/setup?category='),
                       ),
                       _ActionButton(
                         label: 'RESUME SESSION',
@@ -300,15 +375,38 @@ class _DashboardContentState extends State<_DashboardContent> {
                         onTap: () => context.go('/scoreboard'),
                       ),
                       _ActionButton(
-                        label: 'SEED DATA',
-                        icon: Icons.dataset_rounded,
-                        onTap: () => _seedData(context),
+                        label: _isSyncing ? 'SYNCING…' : 'SYNC ALL DATA',
+                        icon: Icons.cloud_sync_rounded,
+                        primary: true,
+                        isLoading: _isSyncing,
+                        onTap: () => _syncAllData(context),
                       ),
+                      // _ActionButton(
+                      //   label: 'SEED DATA',
+                      //   icon: Icons.dataset_rounded,
+                      //   onTap: () => _seedData(context),
+                      // ),
                       _ActionButton(
                         label: 'FORCE RESEED',
                         icon: Icons.refresh_rounded,
                         danger: true,
                         onTap: () => _seedData(context, force: true),
+                      ),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: TvWindowService.instance.isOpen,
+                        builder: (_, isOpen, __) => _ActionButton(
+                          label: isOpen ? 'CLOSE TV' : 'TV SCREEN',
+                          icon:
+                              isOpen ? Icons.tv_off_rounded : Icons.tv_rounded,
+                          primary: isOpen,
+                          onTap: () {
+                            if (isOpen) {
+                              TvWindowService.instance.close();
+                            } else {
+                              TvWindowService.instance.open();
+                            }
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -383,19 +481,27 @@ class _ConnectionLogState extends State<_ConnectionLog> {
 
   Color _levelColor(LogLevel level) {
     switch (level) {
-      case LogLevel.success: return AppColors.greenSuccess;
-      case LogLevel.warning: return const Color(0xFFF57C00);
-      case LogLevel.error:   return const Color(0xFFD32F2F);
-      case LogLevel.info:    return AppColors.textSecondary;
+      case LogLevel.success:
+        return AppColors.greenSuccess;
+      case LogLevel.warning:
+        return const Color(0xFFF57C00);
+      case LogLevel.error:
+        return const Color(0xFFD32F2F);
+      case LogLevel.info:
+        return AppColors.textSecondary;
     }
   }
 
   IconData _levelIcon(LogLevel level) {
     switch (level) {
-      case LogLevel.success: return Icons.check_circle_outline_rounded;
-      case LogLevel.warning: return Icons.warning_amber_rounded;
-      case LogLevel.error:   return Icons.error_outline_rounded;
-      case LogLevel.info:    return Icons.info_outline_rounded;
+      case LogLevel.success:
+        return Icons.check_circle_outline_rounded;
+      case LogLevel.warning:
+        return Icons.warning_amber_rounded;
+      case LogLevel.error:
+        return Icons.error_outline_rounded;
+      case LogLevel.info:
+        return Icons.info_outline_rounded;
     }
   }
 
@@ -547,9 +653,8 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = isAccent
-        ? (accentColor ?? AppColors.greenSuccess)
-        : AppColors.surface;
+    final bg =
+        isAccent ? (accentColor ?? AppColors.greenSuccess) : AppColors.surface;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -567,8 +672,7 @@ class _StatCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon,
-              size: 18,
-              color: isAccent ? Colors.white : AppColors.blueContent),
+              size: 18, color: isAccent ? Colors.white : AppColors.blueContent),
           const Spacer(),
           Text(
             value,
@@ -602,7 +706,9 @@ Future<void> _seedData(BuildContext context, {bool force = false}) async {
   final messenger = ScaffoldMessenger.of(context);
   messenger.showSnackBar(
     SnackBar(
-        content: Text(force ? 'إعادة إضافة الأسئلة التجريبية…' : 'جارٍ إضافة الأسئلة التجريبية…'),
+        content: Text(force
+            ? 'إعادة إضافة الأسئلة التجريبية…'
+            : 'جارٍ إضافة الأسئلة التجريبية…'),
         duration: const Duration(seconds: 2)),
   );
   await DatabaseSeeder.seed(getIt<DatabaseHelper>(), force: force);
@@ -626,6 +732,7 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final bool primary;
   final bool danger;
+  final bool isLoading;
   final VoidCallback onTap;
 
   const _ActionButton(
@@ -633,7 +740,8 @@ class _ActionButton extends StatelessWidget {
       required this.icon,
       required this.onTap,
       this.primary = false,
-      this.danger = false});
+      this.danger = false,
+      this.isLoading = false});
 
   @override
   Widget build(BuildContext context) {
@@ -646,8 +754,7 @@ class _ActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(30),
@@ -678,7 +785,17 @@ class _ActionButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: fgColor),
+            if (isLoading)
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(fgColor),
+                ),
+              )
+            else
+              Icon(icon, size: 18, color: fgColor),
             const SizedBox(width: 8),
             Text(
               label,
@@ -749,8 +866,7 @@ class _BannerRowState extends State<_BannerRow> {
                       width: double.infinity, fit: BoxFit.fitWidth),
                 ),
                 Container(
-                    color: Colors.black
-                        .withOpacity(_hovered ? 0.2 : 0.35)),
+                    color: Colors.black.withOpacity(_hovered ? 0.2 : 0.35)),
                 Positioned(
                   right: 28,
                   top: 0,

@@ -30,6 +30,7 @@ class StartCompetition extends GameEvent {
   // Round 2
   final List<Question> round2Questions;
   final int round2Timer;
+  final int r2QuestionsPerPair;
 
   // Round 3
   final List<Question> round3Questions;
@@ -44,6 +45,7 @@ class StartCompetition extends GameEvent {
     required this.questionsPerTeam,
     required this.round2Questions,
     required this.round2Timer,
+    this.r2QuestionsPerPair = 3,
     required this.round3Questions,
     required this.sharedTimer,
     required this.contestantsPerTeam,
@@ -57,6 +59,7 @@ class StartCompetition extends GameEvent {
         questionsPerTeam,
         round2Questions,
         round2Timer,
+        r2QuestionsPerPair,
         round3Questions,
         sharedTimer,
         contestantsPerTeam,

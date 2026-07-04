@@ -295,9 +295,7 @@ class _SettingsBodyState extends State<_SettingsBody> {
                     value: _isFullscreen,
                     onChanged: (v) {
                       setState(() => _isFullscreen = v);
-                      context
-                          .read<SettingsBloc>()
-                          .add(const ToggleFullscreen());
+                      context.read<SettingsBloc>().add(ToggleFullscreen(v));
                     },
                   ),
                 ],

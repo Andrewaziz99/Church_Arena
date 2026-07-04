@@ -12,6 +12,8 @@ import '../../../../core/widgets/app_nav_sidebar.dart';
 import '../../../questions/domain/entities/question.dart';
 import '../../../scoreboard/presentation/bloc/scoreboard_bloc.dart';
 import '../../../teams/domain/entities/team.dart';
+import '../../../tv/tv_controller.dart';
+import '../../../../services/tv/tv_window_service.dart';
 import '../../domain/entities/game_session.dart';
 import '../bloc/game_bloc.dart';
 import '../widgets/question_display_widget.dart';
@@ -87,12 +89,56 @@ class _GameScreenState extends State<GameScreen> {
                 context.showSnackBar(state.message, isError: true);
               }
               if (state is GameEnded) {
+                TvWindowService.instance.clearScreen();
                 context.read<ScoreboardBloc>().add(SaveResult(state.teams));
                 context.go('/scoreboard');
               }
               // Red flash on wrong answer
               if (state is GameWaitingSecondTeam || state is GameBothWrong) {
                 _triggerRedFlash();
+              }
+
+              // ── TV: send current question on every relevant transition ──
+              void sendToTv(Question q, int round, {bool reveal = false}) {
+                final payload = TvPayload(
+                  type: reveal ? TvPayloadType.reveal : TvPayloadType.question,
+                  text: q.text,
+                  options: q.options,
+                  correctAnswer: reveal ? q.correctAnswer : null,
+                  points: q.points,
+                  roundNumber: round,
+                );
+                if (reveal) {
+                  TvWindowService.instance.revealAnswer(payload);
+                } else {
+                  TvWindowService.instance.showQuestion(payload);
+                }
+              }
+
+              if (state is GameWaitingBuzz) {
+                final s = state.session;
+                if (s.currentQuestionIndex < s.questions.length) {
+                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                }
+              } else if (state is GameInProgress) {
+                final s = state.session;
+                if (s.currentQuestionIndex < s.questions.length) {
+                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                }
+              } else if (state is GamePressureQuestion) {
+                final s = state.session;
+                if (s.currentQuestionIndex < s.questions.length) {
+                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                }
+              } else if (state is GameShowingAnswer) {
+                sendToTv(state.question, state.session.roundNumber,
+                    reveal: true);
+              } else if (state is GameBothWrong) {
+                sendToTv(state.question, state.session.roundNumber);
+              } else if (state is GameRoundTransition ||
+                  state is GameTeamTurn ||
+                  state is GamePairDisplay) {
+                TvWindowService.instance.clearScreen();
               }
             },
             builder: (context, state) {
@@ -1719,6 +1765,51 @@ class _RightPanel extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Column(
               children: [
+                // ── TV window toggle ──────────────────────────────
+                ValueListenableBuilder<bool>(
+                  valueListenable: TvWindowService.instance.isOpen,
+                  builder: (context, isOpen, _) => _PanelBtn(
+                    label: isOpen ? 'Close TV Screen' : 'Open TV Screen',
+                    icon: isOpen ? Icons.tv_off_rounded : Icons.tv_rounded,
+                    bgColor: isOpen
+                        ? AppColors.blueContent.withOpacity(0.15)
+                        : AppColors.blueContent,
+                    fgColor: isOpen ? AppColors.blueContent : Colors.white,
+                    border: isOpen ? AppColors.blueContent : null,
+                    onTap: () async {
+                      if (isOpen) {
+                        await TvWindowService.instance.close();
+                      } else {
+                        await TvWindowService.instance.open();
+                        // Re-send the current question if one is active
+                        final s = TvWindowService.instance;
+                        final bloc = context.read<GameBloc>().state;
+                        GameSession? session;
+                        Question? q;
+                        if (bloc is GameWaitingBuzz) {
+                          session = bloc.session;
+                        } else if (bloc is GameInProgress) {
+                          session = bloc.session;
+                        } else if (bloc is GamePressureQuestion) {
+                          session = bloc.session;
+                        }
+                        if (session != null &&
+                            session.currentQuestionIndex <
+                                session.questions.length) {
+                          q = session.questions[session.currentQuestionIndex];
+                          s.showQuestion(TvPayload(
+                            type: TvPayloadType.question,
+                            text: q.text,
+                            options: q.options,
+                            points: q.points,
+                            roundNumber: session.roundNumber,
+                          ));
+                        }
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
                 // ── Double points (R1 only) ───────────────────────
                 if (session.roundType == RoundType.classic &&
                     session.buzzedTeamId == null &&

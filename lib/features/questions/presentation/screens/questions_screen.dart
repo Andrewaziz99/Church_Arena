@@ -417,26 +417,24 @@ class _QuestionsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedCat = filterCategoryId == null
-        ? null
-        : categories.where((c) => c.id == filterCategoryId).firstOrNull;
-    final isR3 = selectedCat?.roundType == 'r3';
+    // Show reorder UI whenever a specific category is selected.
+    // When "All" is shown, keep the plain list with difficulty filter.
+    final canReorder = filterCategoryId != null;
 
     return Column(
       children: [
-        // Reorder hint banner for تحت الضغط categories
-        if (isR3)
+        if (canReorder)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: AppColors.orangeBg.withOpacity(0.10),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.drag_handle_rounded,
+                Icon(Icons.drag_handle_rounded,
                     size: 16, color: AppColors.orangeBg),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
-                  'اسحب الأسئلة لتغيير ترتيبها في الجولة',
+                  'اسحب السؤال لتغيير ترتيبه',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.orangeBg,
@@ -457,7 +455,7 @@ class _QuestionsPanel extends StatelessWidget {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 )
-              : isR3
+              : canReorder
                   ? _ReorderableQuestionList(
                       questions: questions,
                       categories: categories,

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:window_manager/window_manager.dart';
 import '../constants/app_colors.dart';
+import '../../features/demo/how_to_play_screen.dart';
 import '../../services/arduino/arduino_service.dart';
 import '../../services/sync/supabase_sync_service.dart';
 
@@ -127,6 +128,37 @@ class _AppNavSidebarState extends State<AppNavSidebar> {
               label: 'LIVE',
               route: '/game',
               activeRoute: widget.activeRoute),
+
+          const Divider(height: 1, thickness: 1, color: AppColors.border),
+
+          // ── Demo / How to play ──────────────────────────────────
+          GestureDetector(
+            onTap: () => showHowToPlay(context),
+            child: Container(
+              width: 72,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.help_outline_rounded,
+                      size: 22, color: Color(0xFFFF6B2B)),
+                  const SizedBox(height: 4),
+                  Text('HOW TO',
+                      style: GoogleFonts.alexandria(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFF6B2B),
+                          letterSpacing: 0.5)),
+                  Text('PLAY',
+                      style: GoogleFonts.alexandria(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFFF6B2B),
+                          letterSpacing: 0.5)),
+                ],
+              ),
+            ),
+          ),
 
           const Spacer(),
 

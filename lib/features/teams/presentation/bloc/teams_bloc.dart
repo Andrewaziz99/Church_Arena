@@ -59,18 +59,43 @@ class TeamsBloc extends Bloc<TeamsEvent, TeamsState> {
   }
 
   Future<void> _onSaveTeam(SaveTeam event, Emitter<TeamsState> emit) async {
+    // Optimistic update — show new/edited team immediately, no loading flash.
+    if (state is TeamsLoaded) {
+      final current = state as TeamsLoaded;
+      final idx = current.teams.indexWhere((t) => t.id == event.team.id);
+      final updated = List<Team>.from(current.teams);
+      if (idx >= 0) {
+        updated[idx] = event.team;
+      } else {
+        updated.add(event.team);
+      }
+      emit(TeamsLoaded(updated));
+    }
     final result = await saveTeam(event.team);
     result.fold(
-      (failure) => emit(TeamsError(failure.message)),
-      (_) => add(const LoadTeams()),
+      (failure) {
+        emit(TeamsError(failure.message));
+        add(const LoadTeams()); // revert to real DB state on failure
+      },
+      (_) => null,
     );
   }
 
   Future<void> _onDeleteTeam(DeleteTeam event, Emitter<TeamsState> emit) async {
+    // Optimistic remove.
+    if (state is TeamsLoaded) {
+      final current = state as TeamsLoaded;
+      emit(TeamsLoaded(
+        current.teams.where((t) => t.id != event.teamId).toList(),
+      ));
+    }
     final result = await deleteTeam(event.teamId);
     result.fold(
-      (failure) => emit(TeamsError(failure.message)),
-      (_) => add(const LoadTeams()),
+      (failure) {
+        emit(TeamsError(failure.message));
+        add(const LoadTeams());
+      },
+      (_) => null,
     );
   }
 
@@ -91,10 +116,20 @@ class TeamsBloc extends Bloc<TeamsEvent, TeamsState> {
   }
 
   Future<void> _onResetAllScores(ResetAllScores event, Emitter<TeamsState> emit) async {
+    // Optimistic update — zero all scores immediately, no loading flash.
+    if (state is TeamsLoaded) {
+      final current = state as TeamsLoaded;
+      emit(TeamsLoaded(
+        current.teams.map((t) => t.copyWith(score: 0)).toList(),
+      ));
+    }
     final result = await resetScore('');
     result.fold(
-      (failure) => emit(TeamsError(failure.message)),
-      (_) => add(const LoadTeams()),
+      (failure) {
+        emit(TeamsError(failure.message));
+        add(const LoadTeams()); // revert to real DB state on failure
+      },
+      (_) => null,
     );
   }
 }

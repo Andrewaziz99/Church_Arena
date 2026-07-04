@@ -42,6 +42,8 @@ class GameSession extends Equatable {
   final List<String> teamPairsList;
   /// Index of the current pair (0-based).
   final int currentPairIndex;
+  /// How many questions each pair plays before moving to the next pair.
+  final int r2QuestionsPerPair;
 
   // ── Round 3: Under Pressure ───────────────────────────────────────────────
   /// Number of contestants per team (parallel to [teams]).
@@ -71,6 +73,7 @@ class GameSession extends Equatable {
     this.isDoubleActive = false,
     this.teamPairsList = const [],
     this.currentPairIndex = 0,
+    this.r2QuestionsPerPair = 1,
     this.contestantsPerTeam = const [],
     this.currentContestantIndex = 0,
     this.sharedTimerSeconds = 45,
@@ -133,6 +136,7 @@ class GameSession extends Equatable {
     bool? isDoubleActive,
     List<String>? teamPairsList,
     int? currentPairIndex,
+    int? r2QuestionsPerPair,
     List<int>? contestantsPerTeam,
     int? currentContestantIndex,
     int? sharedTimerSeconds,
@@ -162,6 +166,7 @@ class GameSession extends Equatable {
       isDoubleActive: isDoubleActive ?? this.isDoubleActive,
       teamPairsList: teamPairsList ?? this.teamPairsList,
       currentPairIndex: currentPairIndex ?? this.currentPairIndex,
+      r2QuestionsPerPair: r2QuestionsPerPair ?? this.r2QuestionsPerPair,
       contestantsPerTeam: contestantsPerTeam ?? this.contestantsPerTeam,
       currentContestantIndex:
           currentContestantIndex ?? this.currentContestantIndex,
@@ -190,6 +195,7 @@ class GameSession extends Equatable {
         isDoubleActive,
         teamPairsList,
         currentPairIndex,
+        r2QuestionsPerPair,
         contestantsPerTeam,
         currentContestantIndex,
         sharedTimerSeconds,

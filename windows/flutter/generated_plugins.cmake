@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
   audioplayers_windows
+  desktop_multi_window
   flutter_libserialport
   passkeys_windows
   screen_retriever

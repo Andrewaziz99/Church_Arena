@@ -27,12 +27,12 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 
   // ── Round 1 ────────────────────────────────────────────────────────────────
   int _r1Timer = 30;
-  int _questionsPerTeam = 5;
   String? _r1CategoryId;
   DifficultyLevel? _r1Difficulty;
 
   // ── Round 2 ────────────────────────────────────────────────────────────────
   int _r2Timer = 20;
+  int _r2QuestionsPerPair = 3;
   String? _r2CategoryId;
   DifficultyLevel? _r2Difficulty;
 
@@ -41,6 +41,8 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   String? _r3CategoryId;
   DifficultyLevel? _r3Difficulty;
   final Map<String, int> _contestantCounts = {};
+  /// null = use ALL available R3 pool questions.
+  int? _r3QuestionsPerContestant;
 
   String? get _sectionName => widget.preselectedCategoryName;
 
@@ -111,46 +113,53 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
       return;
     }
 
-    // R1
+    // R1 — use ALL available pool questions, split equally across teams
     final r1Pool = _pool(all: allQ, sectionCats: sectionCats, roundType: 'r1', categoryId: _r1CategoryId, difficulty: _r1Difficulty);
-    final r1Need = _questionsPerTeam * teams.length;
-    if (r1Pool.length < r1Need) {
-      _showError('أسئلة الفقرة الأولى غير كافية.\nمحتاج $r1Need، متاح ${r1Pool.length}.\n\nاضغط SEED DATA في الداشبورد لإضافة أسئلة تجريبية.');
+    final r1PerTeam = r1Pool.length ~/ teams.length;
+    final r1Need = r1PerTeam * teams.length;
+    if (r1Need == 0) {
+      _showError('لا توجد أسئلة كافية للفقرة الأولى.\n\nاضغط SEED DATA في الداشبورد لإضافة أسئلة تجريبية.');
       return;
     }
-    final r1Shuffled = [...r1Pool]..shuffle();
-    final r1Questions = r1Shuffled.take(r1Need).toList();
+    final r1Questions = r1Pool.take(r1Need).toList();
     final usedIds = r1Questions.map((q) => q.id).toSet();
 
     // R2
     final r2Pool = _pool(all: allQ, sectionCats: sectionCats, roundType: 'r2', categoryId: _r2CategoryId, difficulty: _r2Difficulty, excludeIds: usedIds);
-    final r2Need = teams.length ~/ 2;
+    final r2Need = (teams.length ~/ 2) * _r2QuestionsPerPair;
     if (r2Pool.length < r2Need) {
       _showError('أسئلة الفقرة الثانية غير كافية.\nمحتاج $r2Need، متاح ${r2Pool.length}.');
       return;
     }
-    final r2Shuffled = [...r2Pool]..shuffle();
-    final r2Questions = r2Shuffled.take(r2Need).toList();
+    final r2Questions = r2Pool.take(r2Need).toList();
     usedIds.addAll(r2Questions.map((q) => q.id));
 
     // R3
     final contestantsPerTeam = teams.map(_contestantsFor).toList();
-    final r3Need = contestantsPerTeam.fold(0, (s, c) => s + c);
+    final totalContestants = contestantsPerTeam.fold(0, (s, c) => s + c);
     final r3Pool = _pool(all: allQ, sectionCats: sectionCats, roundType: 'r3', categoryId: _r3CategoryId, difficulty: _r3Difficulty, excludeIds: usedIds);
+    // null = All: use all available pool questions.
+    final r3Need = _r3QuestionsPerContestant == null
+        ? r3Pool.length
+        : totalContestants * _r3QuestionsPerContestant!;
+    if (r3Pool.isEmpty) {
+      _showError('لا توجد أسئلة للفقرة الثالثة.');
+      return;
+    }
     if (r3Pool.length < r3Need) {
       _showError('أسئلة الفقرة الثالثة غير كافية.\nمحتاج $r3Need، متاح ${r3Pool.length}.');
       return;
     }
-    final r3Shuffled = [...r3Pool]..shuffle();
-    final r3Questions = r3Shuffled.take(r3Need).toList();
+    final r3Questions = r3Pool.take(r3Need).toList();
 
     context.read<GameBloc>().add(StartCompetition(
       teams: teams,
       round1Questions: r1Questions,
       round1Timer: _r1Timer,
-      questionsPerTeam: _questionsPerTeam,
+      questionsPerTeam: r1Questions.length ~/ teams.length,
       round2Questions: r2Questions,
       round2Timer: _r2Timer,
+      r2QuestionsPerPair: _r2QuestionsPerPair,
       round3Questions: r3Questions,
       sharedTimer: _r3SharedTimer,
       contestantsPerTeam: contestantsPerTeam,
@@ -179,6 +188,13 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
             final selectedTeams = sectionTeams
                 .where((t) => _selectedTeamIds.contains(t.id))
                 .toList();
+
+            // R1 pool preview — show how many questions per team
+            final r1Pool = _pool(all: allQ, sectionCats: sectionCats, roundType: 'r1',
+                categoryId: _r1CategoryId, difficulty: _r1Difficulty);
+            final r1PerTeam = _selectedTeamIds.isEmpty
+                ? 0
+                : r1Pool.length ~/ _selectedTeamIds.length;
 
             return Scaffold(
               backgroundColor: Colors.transparent,
@@ -295,15 +311,29 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _Label(text: 'أسئلة لكل فريق', value: '$_questionsPerTeam'),
-                                Slider(
-                                  value: _questionsPerTeam.toDouble(),
-                                  min: 1, max: 10, divisions: 9,
-                                  activeColor: AppColors.greenSuccess,
-                                  label: '$_questionsPerTeam',
-                                  onChanged: (v) => setState(() => _questionsPerTeam = v.round()),
+                                // Info banner — all available questions used automatically
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.greenSuccess.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, color: AppColors.greenSuccess, size: 16),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _selectedTeamIds.isEmpty
+                                            ? 'اختر الفرق لمعرفة عدد الأسئلة'
+                                            : '$r1PerTeam سؤال لكل فريق (${r1Pool.length} إجمالاً)',
+                                        textDirection: TextDirection.rtl,
+                                        style: GoogleFonts.alexandria(color: AppColors.greenSuccess, fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 12),
                                 _Label(text: 'وقت السؤال', value: '$_r1Timer ث'),
                                 const SizedBox(height: 6),
                                 _TimerChips(
@@ -319,7 +349,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                                   roundType: 'r1',
                                   selectedCategoryId: _r1CategoryId,
                                   selectedDifficulty: _r1Difficulty,
-                                  need: _questionsPerTeam * _selectedTeamIds.length,
+                                  need: r1Pool.length, // use all available
                                   color: AppColors.greenSuccess,
                                   onCatChanged: (id) => setState(() => _r1CategoryId = id),
                                   onDiffChanged: (d) => setState(() => _r1Difficulty = d),
@@ -352,6 +382,15 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 12),
+                                _Label(text: 'أسئلة لكل مباراة', value: '$_r2QuestionsPerPair'),
+                                const SizedBox(height: 6),
+                                _NumberChips(
+                                  values: const [1, 2, 3, 5, 10],
+                                  selected: _r2QuestionsPerPair,
+                                  color: AppColors.blueContent,
+                                  onSelect: (v) => setState(() => _r2QuestionsPerPair = v),
+                                ),
+                                const SizedBox(height: 12),
                                 _Label(text: 'وقت السؤال', value: '$_r2Timer ث'),
                                 const SizedBox(height: 6),
                                 _TimerChips(
@@ -367,7 +406,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                                   roundType: 'r2',
                                   selectedCategoryId: _r2CategoryId,
                                   selectedDifficulty: _r2Difficulty,
-                                  need: _selectedTeamIds.length ~/ 2,
+                                  need: (_selectedTeamIds.length ~/ 2) * _r2QuestionsPerPair,
                                   color: AppColors.blueContent,
                                   onCatChanged: (id) => setState(() => _r2CategoryId = id),
                                   onDiffChanged: (d) => setState(() => _r2Difficulty = d),
@@ -442,13 +481,27 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                                     );
                                   }),
                                 const SizedBox(height: 14),
+                                // ── Questions per contestant ──────────────────────────
+                                _Label(
+                                  text: 'أسئلة لكل متسابق',
+                                  value: _r3QuestionsPerContestant == null ? 'الكل' : '$_r3QuestionsPerContestant',
+                                ),
+                                const SizedBox(height: 6),
+                                _R3QuestionsChips(
+                                  selected: _r3QuestionsPerContestant,
+                                  onSelect: (v) => setState(() => _r3QuestionsPerContestant = v),
+                                ),
+                                const SizedBox(height: 14),
                                 _FilterBlock(
                                   categories: sectionCats.where((c) => c.roundType == 'r3' || c.roundType.isEmpty).toList(),
                                   allQuestions: allQ,
                                   roundType: 'r3',
                                   selectedCategoryId: _r3CategoryId,
                                   selectedDifficulty: _r3Difficulty,
-                                  need: selectedTeams.fold(0, (s, t) => s + _contestantsFor(t)),
+                                  // null = All mode: show available count without a minimum constraint
+                                  need: _r3QuestionsPerContestant == null
+                                      ? null
+                                      : selectedTeams.fold(0, (s, t) => s + _contestantsFor(t)) * _r3QuestionsPerContestant!,
                                   color: AppColors.redError,
                                   onCatChanged: (id) => setState(() => _r3CategoryId = id),
                                   onDiffChanged: (d) => setState(() => _r3Difficulty = d),
@@ -569,6 +622,7 @@ class _Label extends StatelessWidget {
   }
 }
 
+/// Chips for timer values (show label with "ث" suffix).
 class _TimerChips extends StatelessWidget {
   final List<int> values;
   final int selected;
@@ -606,6 +660,111 @@ class _TimerChips extends StatelessWidget {
   }
 }
 
+/// Plain number chips (no suffix) — used for R2 questions-per-pair.
+class _NumberChips extends StatelessWidget {
+  final List<int> values;
+  final int selected;
+  final Color color;
+  final ValueChanged<int> onSelect;
+  const _NumberChips({required this.values, required this.selected, required this.color, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: values.map((v) {
+        final sel = v == selected;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: () => onSelect(v),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              decoration: BoxDecoration(
+                color: sel ? color.withOpacity(0.12) : AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: sel ? color : AppColors.border, width: sel ? 2 : 1),
+              ),
+              child: Text('$v',
+                  style: GoogleFonts.alexandria(
+                      color: sel ? color : AppColors.textSecondary,
+                      fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13)),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// R3 questions-per-contestant chips: 1, 2, 3, 5, 10, plus "الكل" (null = All).
+class _R3QuestionsChips extends StatelessWidget {
+  final int? selected; // null = All
+  final ValueChanged<int?> onSelect;
+  const _R3QuestionsChips({required this.selected, required this.onSelect});
+
+  static const _values = [1, 2, 3, 5, 10];
+  static const _color = AppColors.redError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        ..._values.map((v) {
+          final sel = selected == v;
+          return GestureDetector(
+            onTap: () => onSelect(v),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              decoration: BoxDecoration(
+                color: sel ? _color.withOpacity(0.12) : AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: sel ? _color : AppColors.border, width: sel ? 2 : 1),
+              ),
+              child: Text('$v',
+                  style: GoogleFonts.alexandria(
+                      color: sel ? _color : AppColors.textSecondary,
+                      fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13)),
+            ),
+          );
+        }),
+        GestureDetector(
+          onTap: () => onSelect(null),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected == null ? _color.withOpacity(0.12) : AppColors.surfaceLight,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: selected == null ? _color : AppColors.border,
+                  width: selected == null ? 2 : 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.select_all_rounded, size: 14,
+                    color: selected == null ? _color : AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Text('الكل',
+                    style: GoogleFonts.alexandria(
+                        color: selected == null ? _color : AppColors.textSecondary,
+                        fontWeight: selected == null ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _FilterBlock extends StatelessWidget {
   final List<Category> categories;
   final List<Question> allQuestions;
@@ -614,7 +773,7 @@ class _FilterBlock extends StatelessWidget {
   final DifficultyLevel? selectedDifficulty;
   final ValueChanged<String?> onCatChanged;
   final ValueChanged<DifficultyLevel?> onDiffChanged;
-  final int need;
+  final int? need; // null = All mode
   final Color color;
 
   const _FilterBlock({
@@ -643,19 +802,21 @@ class _FilterBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final avail = _available;
-    final ok = need == 0 || avail >= need;
+    final n = need;
+    final ok = n == null || n == 0 || avail >= n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Availability badge
         Row(
           children: [
             Icon(ok ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
                 size: 15, color: ok ? AppColors.greenSuccess : AppColors.redError),
             const SizedBox(width: 6),
             Text(
-              need > 0 ? '$avail أسئلة متاحة (محتاج $need)' : '$avail أسئلة متاحة',
+              n != null && n > 0
+                  ? '$avail أسئلة متاحة (محتاج $n)'
+                  : '$avail أسئلة متاحة',
               textDirection: TextDirection.rtl,
               style: GoogleFonts.alexandria(
                   fontSize: 12,
@@ -664,7 +825,6 @@ class _FilterBlock extends StatelessWidget {
             ),
           ],
         ),
-
         if (categories.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text('فئة:', style: GoogleFonts.alexandria(color: AppColors.textSecondary, fontSize: 12)),
@@ -676,7 +836,6 @@ class _FilterBlock extends StatelessWidget {
                 color: Color(c.color), onTap: () => onCatChanged(c.id))),
           ]),
         ],
-
         const SizedBox(height: 10),
         Text('صعوبة:', style: GoogleFonts.alexandria(color: AppColors.textSecondary, fontSize: 12)),
         const SizedBox(height: 6),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
@@ -23,7 +24,20 @@ class DatabaseHelper {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
-    final dbPath = await getDatabasesPath();
+
+    // On desktop, getDatabasesPath() returns the cwd (the install dir on
+    // Windows — C:\Program Files\...) which is write-protected, causing
+    // PathAccessException / errno 5. Store the database in the user's
+    // Documents\Church Arena folder instead — always writable and easy to find.
+    final String dbPath;
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final docs = await getApplicationDocumentsDirectory();
+      dbPath = join(docs.path, 'Church Arena');
+    } else {
+      dbPath = await getDatabasesPath();
+    }
+
+    await Directory(dbPath).create(recursive: true);
     final path = join(dbPath, _dbName);
     return openDatabase(
       path,
