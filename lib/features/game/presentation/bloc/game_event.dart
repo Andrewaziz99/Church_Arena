@@ -116,6 +116,13 @@ class BuzzCountdownTick extends GameEvent {
   List<Object> get props => [];
 }
 
+/// Internal: tick for the 3-second inter-question transition pause.
+class QuestionTransitionTick extends GameEvent {
+  const QuestionTransitionTick();
+  @override
+  List<Object> get props => [];
+}
+
 /// Sends a reset signal to the Arduino and unlocks the buzzer.
 class ResetBuzzer extends GameEvent {
   const ResetBuzzer();

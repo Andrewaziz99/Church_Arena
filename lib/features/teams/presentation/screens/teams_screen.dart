@@ -2,15 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../core/widgets/app_nav_sidebar.dart';
 import '../../../scoreboard/data/result_local_datasource.dart';
+import '../../domain/entities/team.dart';
 import '../bloc/teams_bloc.dart';
 import '../widgets/team_card_widget.dart';
 import '../widgets/team_form_dialog.dart';
 
-class TeamsScreen extends StatelessWidget {
+class TeamsScreen extends StatefulWidget {
   const TeamsScreen({super.key});
+
+  @override
+  State<TeamsScreen> createState() => _TeamsScreenState();
+}
+
+class _TeamsScreenState extends State<TeamsScreen> {
+  /// null = show teams from every age category.
+  String? _selectedSection;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +37,13 @@ class TeamsScreen extends StatelessWidget {
                 }
               },
               builder: (context, state) {
-                final teams = state is TeamsLoaded ? state.teams : [];
+                final allTeams =
+                    state is TeamsLoaded ? state.teams : <Team>[];
+                final teams = _selectedSection == null
+                    ? allTeams
+                    : allTeams
+                        .where((t) => t.section == _selectedSection)
+                        .toList();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,33 +111,52 @@ class TeamsScreen extends StatelessWidget {
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+
+                    // ── Age-category filter ──────────────────────
+                    if (allTeams.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _SectionFilterBar(
+                          selected: _selectedSection,
+                          allCount: allTeams.length,
+                          counts: {
+                            for (final s in AppStrings.sections)
+                              s: allTeams.where((t) => t.section == s).length,
+                          },
+                          onSelect: (s) => setState(() => _selectedSection = s),
+                        ),
+                      ),
+
+                    const SizedBox(height: 16),
 
                     // ── Team cards ────────────────────────────────
                     Expanded(
                       child: state is TeamsLoading
                           ? const Center(child: CircularProgressIndicator())
-                          : (state is TeamsLoaded && state.teams.isEmpty)
+                          : (state is TeamsLoaded && allTeams.isEmpty)
                               ? _EmptyState(
                                   onAdd: () => showDialog(
                                     context: context,
                                     builder: (_) => TeamFormDialog(blocContext: context),
                                   ),
                                 )
-                              : GridView.builder(
-                                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 4,
-                                    crossAxisSpacing: 16,
-                                    mainAxisSpacing: 16,
-                                    childAspectRatio: 0.72,
-                                  ),
-                                  itemCount: state is TeamsLoaded ? state.teams.length : 0,
-                                  itemBuilder: (context, index) {
-                                    final team = (state as TeamsLoaded).teams[index];
-                                    return TeamCardWidget(team: team);
-                                  },
-                                ),
+                              : teams.isEmpty
+                                  ? const _EmptyFilterState()
+                                  : GridView.builder(
+                                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 4,
+                                        crossAxisSpacing: 16,
+                                        mainAxisSpacing: 16,
+                                        childAspectRatio: 0.72,
+                                      ),
+                                      itemCount: teams.length,
+                                      itemBuilder: (context, index) {
+                                        final team = teams[index];
+                                        return TeamCardWidget(team: team);
+                                      },
+                                    ),
                     ),
                   ],
                 );
@@ -305,6 +340,129 @@ class _SyncLastGameButtonState extends State<_SyncLastGameButton> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Age-category filter bar ──────────────────────────────────────────────────
+
+class _SectionFilterBar extends StatelessWidget {
+  final String? selected;
+  final int allCount;
+  final Map<String, int> counts;
+  final ValueChanged<String?> onSelect;
+
+  const _SectionFilterBar({
+    required this.selected,
+    required this.allCount,
+    required this.counts,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _FilterChip(
+            label: AppStrings.allSections,
+            count: allCount,
+            selected: selected == null,
+            onTap: () => onSelect(null),
+          ),
+          for (final s in AppStrings.sections) ...[
+            const SizedBox(width: 10),
+            _FilterChip(
+              label: s,
+              count: counts[s] ?? 0,
+              selected: selected == s,
+              onTap: () => onSelect(s),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.orangeDark : AppColors.surface,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: selected ? AppColors.orangeDark : AppColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              textDirection: TextDirection.rtl,
+              style: GoogleFonts.alexandria(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: GoogleFonts.alexandria(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? Colors.white.withOpacity(0.8)
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Empty state (no filter match) ────────────────────────────────────────────
+
+class _EmptyFilterState extends StatelessWidget {
+  const _EmptyFilterState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.filter_alt_off_rounded, size: 64, color: Colors.white54),
+          const SizedBox(height: 16),
+          Text(
+            'لا توجد فرق في هذه الفئة',
+            style: GoogleFonts.alexandria(color: Colors.white70, fontSize: 16),
+          ),
+        ],
       ),
     );
   }

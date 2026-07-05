@@ -22,10 +22,15 @@ class GameBloc extends Bloc<GameEvent, GameState> {
   Timer? _gameTimer;
   Timer? _buzzTimer;
   Timer? _revealTimer;
+  Timer? _transitionTimer;
   StreamSubscription<String>? _buzzerSubscription;
 
   /// Session to advance after the 2-second answer-reveal screen expires.
   GameSession? _pendingAdvanceSession;
+
+  /// Session + destination held during the 3-second inter-question pause.
+  GameSession? _pendingTransitionSession;
+  bool _pendingTransitionIsPressure = false;
 
   // ── Pending round data (stored at competition start, consumed on transition) ─
   List<Question>? _pendingR2Questions;
@@ -59,6 +64,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     on<RevealAnswer>(_onRevealAnswer);
     on<SkipAfterBothWrong>(_onSkipAfterBothWrong);
     on<AnswerRevealTick>(_onAnswerRevealTick);
+    on<QuestionTransitionTick>(_onQuestionTransitionTick);
 
     _buzzerSubscription = arduinoService.buzzerStream.listen((teamIndex) {
       final s = state;
@@ -98,6 +104,14 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     });
   }
 
+  /// Timer sound cue for a given number of seconds left: a plain tick every
+  /// second. Urgency near the end is conveyed visually (the countdown badge
+  /// turns red and pulses once 5 seconds or fewer remain) rather than with a
+  /// separate sound clip.
+  Future<void> _playTimerSfx(int remaining) async {
+    await audioService.playTick();
+  }
+
   void _stopGameTimer() {
     _gameTimer?.cancel();
     _gameTimer = null;
@@ -115,6 +129,58 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     _buzzTimer = null;
   }
 
+  void _startTransitionTimer() {
+    _transitionTimer?.cancel();
+    _transitionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      add(const QuestionTransitionTick());
+    });
+  }
+
+  void _stopTransitionTimer() {
+    _transitionTimer?.cancel();
+    _transitionTimer = null;
+  }
+
+  /// Kicks off the 3-second "next question in…" pause used for every
+  /// automatic advance (skip / correct / wrong / timeout). [isPressure]
+  /// picks which state to land on once the pause ends.
+  void _beginQuestionTransition(
+    GameSession session,
+    Emitter<GameState> emit, {
+    required bool isPressure,
+  }) {
+    _stopGameTimer(); // the pause itself isn't counted against the timer
+    _pendingTransitionSession = session;
+    _pendingTransitionIsPressure = isPressure;
+    emit(GameQuestionTransition(session, 3));
+    _startTransitionTimer();
+  }
+
+  Future<void> _onQuestionTransitionTick(
+      QuestionTransitionTick event, Emitter<GameState> emit) async {
+    if (state is! GameQuestionTransition) {
+      _stopTransitionTimer();
+      return;
+    }
+    final s = state as GameQuestionTransition;
+    final next = s.secondsLeft - 1;
+    if (next > 0) {
+      emit(GameQuestionTransition(s.session, next));
+      return;
+    }
+    _stopTransitionTimer();
+    final session = _pendingTransitionSession;
+    final isPressure = _pendingTransitionIsPressure;
+    _pendingTransitionSession = null;
+    if (session == null) return;
+    if (isPressure) {
+      emit(GamePressureQuestion(session));
+    } else {
+      emit(GameWaitingBuzz(session));
+    }
+    _startGameTimer();
+  }
+
   // ── State helpers ─────────────────────────────────────────────────────────
 
   GameSession? _sessionFromState([GameState? s]) {
@@ -129,6 +195,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     if (s is GamePressureQuestion) return s.session;
     if (s is GameShowingAnswer) return s.session;
     if (s is GameBothWrong) return s.session;
+    if (s is GameQuestionTransition) return s.session;
     return null;
   }
 
@@ -193,7 +260,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       );
       await repository.saveSession(updated);
       arduinoService.resetBuzzers();
-      emit(GameWaitingBuzz(updated));
+      _beginQuestionTransition(updated, emit, isPressure: false);
     }
   }
 
@@ -230,7 +297,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       );
       await repository.saveSession(updated);
       arduinoService.resetBuzzers();
-      emit(GameWaitingBuzz(updated));
+      _beginQuestionTransition(updated, emit, isPressure: false);
     }
   }
 
@@ -252,7 +319,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
         currentQuestionIndex: nextQIdx,
       );
       await repository.saveSession(updated);
-      emit(GamePressureQuestion(updated));
+      _beginQuestionTransition(updated, emit, isPressure: true);
     }
   }
 
@@ -303,6 +370,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     await repository.saveSession(session);
     arduinoService.resetBuzzers();
     emit(GameWaitingBuzz(session));
+    _startGameTimer();
   }
 
   // ── Competition start ─────────────────────────────────────────────────────
@@ -383,9 +451,10 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       emit(GamePressureQuestion(updated));
       _startGameTimer();
     } else {
-      // R1: show current team's first question, no timer yet
+      // R1: show current team's first question — timer starts immediately.
       arduinoService.resetBuzzers();
       emit(GameWaitingBuzz(session));
+      _startGameTimer();
     }
   }
 
@@ -395,6 +464,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
     final session = (state as GamePairDisplay).session;
     arduinoService.resetBuzzers();
     emit(GameWaitingBuzz(session));
+    _startGameTimer();
   }
 
   // ── Round transition ──────────────────────────────────────────────────────
@@ -488,14 +558,16 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
   Future<void> _onNextQuestion(
       NextQuestion event, Emitter<GameState> emit) async {
-    _stopGameTimer();
-    _stopBuzzTimer();
-
     if (state is GamePressureQuestion) {
+      // R3 "Under Pressure" shares one continuous timer across a team's
+      // contestants — skipping to the next contestant must not touch it.
       final session = (state as GamePressureQuestion).session;
       await _advanceContestant(session, emit);
       return;
     }
+
+    _stopGameTimer();
+    _stopBuzzTimer();
 
     final session = _sessionFromState();
     if (session == null) return;
@@ -706,6 +778,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
         _syncSession(updated);
         arduinoService.resetBuzzers();
         emit(GameWaitingSecondTeam(updated));
+        _startGameTimer();
       } else {
         // Second wrong in R1 → let controller decide whether to reveal answer
         final updated = session.copyWith(
@@ -739,6 +812,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
         _syncSession(updated);
         arduinoService.resetBuzzers();
         emit(GameWaitingSecondTeam(updated));
+        _startGameTimer();
       } else {
         // Second wrong in R2 → let controller decide whether to reveal answer
         final updated = session.copyWith(
@@ -837,14 +911,58 @@ class GameBloc extends Bloc<GameEvent, GameState> {
       final newRemaining = session.timerRemaining - 1;
       if (newRemaining <= 0) {
         _stopGameTimer();
-        await audioService.playTick();
         // Time's up → advance to next team
         await _advanceR3Team(session, emit);
       } else {
-        if (newRemaining <= 5) await audioService.playTick();
+        await _playTimerSfx(newRemaining);
         final updated = session.copyWith(timerRemaining: newRemaining);
         await repository.saveSession(updated);
         emit(GamePressureQuestion(updated));
+      }
+      return;
+    }
+
+    // Waiting for a buzz (question just shown) or waiting for a second team
+    // to steal — the countdown to buzz in ticks here too.
+    if (state is GameWaitingBuzz || state is GameWaitingSecondTeam) {
+      final isSecondTeamWaiting = state is GameWaitingSecondTeam;
+      final session = _sessionFromState()!;
+      final newRemaining = session.timerRemaining - 1;
+
+      if (newRemaining <= 0) {
+        _stopGameTimer();
+        final clean = session.copyWith(
+            buzzedTeamId: null, firstWrongTeamId: null, isDoubleActive: false);
+
+        if (isSecondTeamWaiting) {
+          // Second team also failed to buzz in time — same outcome as both
+          // teams answering wrong: let the controller reveal or skip.
+          final currentQuestion =
+              clean.currentQuestionIndex < clean.questions.length
+                  ? clean.questions[clean.currentQuestionIndex]
+                  : null;
+          if (currentQuestion != null) {
+            emit(GameBothWrong(clean, currentQuestion));
+            return;
+          }
+        }
+
+        // Nobody (else) buzzed in time — move straight to the next question.
+        switch (clean.roundType) {
+          case RoundType.classic:
+            await _advanceR1Question(clean, emit);
+          case RoundType.penaltyShootout:
+            await _advanceR2Pair(clean, emit);
+          case RoundType.underPressure:
+            break;
+        }
+      } else {
+        await _playTimerSfx(newRemaining);
+        final updated = session.copyWith(timerRemaining: newRemaining);
+        await repository.saveSession(updated);
+        emit(isSecondTeamWaiting
+            ? GameWaitingSecondTeam(updated)
+            : GameWaitingBuzz(updated));
       }
       return;
     }
@@ -855,7 +973,6 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
     if (newRemaining <= 0) {
       _stopGameTimer();
-      await audioService.playTick();
       // Time expired → depending on round, skip or pause
       switch (session.roundType) {
         case RoundType.classic:
@@ -873,7 +990,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
           break;
       }
     } else {
-      if (newRemaining <= 5) await audioService.playTick();
+      await _playTimerSfx(newRemaining);
       final updated = session.copyWith(timerRemaining: newRemaining);
       await repository.saveSession(updated);
       emit(GameInProgress(updated));
@@ -885,6 +1002,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
   Future<void> _onEndGame(EndGame event, Emitter<GameState> emit) async {
     _stopGameTimer();
     _stopBuzzTimer();
+    _stopTransitionTimer();
     await audioService.playVictory();
     final session = _sessionFromState();
     final sorted = [...(session?.teams ?? <Team>[])]
@@ -904,6 +1022,7 @@ class GameBloc extends Bloc<GameEvent, GameState> {
   Future<void> close() {
     _stopGameTimer();
     _stopBuzzTimer();
+    _stopTransitionTimer();
     _revealTimer?.cancel();
     _buzzerSubscription?.cancel();
     return super.close();

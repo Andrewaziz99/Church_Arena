@@ -23,6 +23,7 @@ class _TvAppState extends State<TvApp> {
       switch (call.method) {
         case 'showQuestion':
         case 'revealAnswer':
+        case 'showBuzzed':
           final data =
               jsonDecode(call.arguments as String) as Map<String, dynamic>;
           TvController.instance.update(TvPayload.fromJson(data));

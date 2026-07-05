@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -869,7 +870,15 @@ class _TeamPill extends StatelessWidget {
 // Animations
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Animated buzzer + score counter for R1
+/// Stages mirroring the real R1 flow:
+///  waiting → the question is shown and the countdown starts immediately
+///  buzzed  → a team hits the buzzer → full-color takeover with their name
+///  scored  → back to the question, correct-answer points added
+enum _R1Stage { waiting, buzzed, scored }
+
+/// Animated buzzer + score counter for R1 — mirrors the real screen flow:
+/// the timer starts the moment the question appears, and buzzing in takes
+/// over the whole screen with the team's name before the score updates.
 class _BuzzerRaceAnimation extends StatefulWidget {
   final Color color;
   const _BuzzerRaceAnimation({required this.color});
@@ -878,116 +887,236 @@ class _BuzzerRaceAnimation extends StatefulWidget {
   State<_BuzzerRaceAnimation> createState() => _BuzzerRaceAnimationState();
 }
 
-class _BuzzerRaceAnimationState extends State<_BuzzerRaceAnimation>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _buzz;
-  late final Animation<double> _score;
-  int _scoreVal = 0;
+class _BuzzerRaceAnimationState extends State<_BuzzerRaceAnimation> {
+  static const _teamName = 'الفريق الأحمر';
+  static const _waitSeconds = 5;
+
+  _R1Stage _stage = _R1Stage.waiting;
+  int _secondsLeft = _waitSeconds;
+  Timer? _tickTimer;
+  Timer? _stageTimer;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 2400))
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed) {
-          Future.delayed(const Duration(milliseconds: 800), () {
-            if (mounted) {
-              setState(() => _scoreVal = 0);
-              _ctrl.forward(from: 0);
-            }
-          });
-        }
-      });
-    _buzz = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 0.6));
-    _score = CurvedAnimation(parent: _ctrl, curve: const Interval(0.65, 0.9));
-    _ctrl.addListener(() {
-      final s = (_score.value * 10).round();
-      if (s != _scoreVal) setState(() => _scoreVal = s);
+    _runWaiting();
+  }
+
+  void _runWaiting() {
+    setState(() {
+      _stage = _R1Stage.waiting;
+      _secondsLeft = _waitSeconds;
     });
-    _ctrl.forward();
+    _tickTimer?.cancel();
+    _tickTimer = Timer.periodic(const Duration(milliseconds: 550), (t) {
+      if (!mounted) return;
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 1) {
+        t.cancel();
+        _runBuzzed();
+      }
+    });
+  }
+
+  void _runBuzzed() {
+    if (!mounted) return;
+    setState(() => _stage = _R1Stage.buzzed);
+    _stageTimer?.cancel();
+    _stageTimer = Timer(const Duration(milliseconds: 1300), _runScored);
+  }
+
+  void _runScored() {
+    if (!mounted) return;
+    setState(() => _stage = _R1Stage.scored);
+    _stageTimer?.cancel();
+    _stageTimer = Timer(const Duration(milliseconds: 1100), _runWaiting);
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _tickTimer?.cancel();
+    _stageTimer?.cancel();
     super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 210,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        child: switch (_stage) {
+          _R1Stage.waiting => _R1WaitingCard(
+              key: const ValueKey('waiting'),
+              secondsLeft: _secondsLeft,
+              totalSeconds: _waitSeconds,
+              color: widget.color,
+            ),
+          _R1Stage.buzzed => _R1BuzzedCard(
+              key: const ValueKey('buzzed'),
+              color: widget.color,
+              teamName: _teamName,
+            ),
+          _R1Stage.scored => _R1ScoredCard(
+              key: const ValueKey('scored'),
+              color: widget.color,
+            ),
+        },
+      ),
+    );
+  }
+}
+
+/// Question visible + countdown already ticking — matches the real behavior
+/// where the timer starts the instant the question is displayed, before
+/// anyone has buzzed in.
+class _R1WaitingCard extends StatelessWidget {
+  final int secondsLeft;
+  final int totalSeconds;
+  final Color color;
+  const _R1WaitingCard({
+    super.key,
+    required this.secondsLeft,
+    required this.totalSeconds,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final low = secondsLeft <= 2;
+    final timerColor = low ? const Color(0xFFE53935) : color;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D1428),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF1E2A45)),
+          ),
+          child: Text(
+            'ما هي عاصمة مصر؟',
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.alexandria(
+                color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Countdown — already running while everyone waits to buzz.
+        SizedBox(
+          width: 52,
+          height: 52,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(52, 52),
+                painter: _ArcPainter(
+                  fraction: secondsLeft / totalSeconds,
+                  color: timerColor,
+                ),
+              ),
+              Text('$secondsLeft',
+                  style: GoogleFonts.alexandria(
+                      color: timerColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text('بانتظار الضغط على الزرار…',
+            textDirection: TextDirection.rtl,
+            style: GoogleFonts.alexandria(color: Colors.white38, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+/// Full-color takeover the instant a team buzzes — mirrors the real
+/// fullscreen "team buzzed in" card shown on the operator and TV screens.
+class _R1BuzzedCard extends StatelessWidget {
+  final Color color;
+  final String teamName;
+  const _R1BuzzedCard({
+    super.key,
+    required this.color,
+    required this.teamName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: RadialGradient(
+          colors: [color.withOpacity(0.55), const Color(0xFF0D1428)],
+        ),
+        border: Border.all(color: color, width: 2),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.radio_button_checked_rounded, color: Colors.white, size: 34)
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .scale(
+                  begin: const Offset(1, 1),
+                  end: const Offset(1.15, 1.15),
+                  duration: 400.ms),
+          const SizedBox(height: 10),
+          Text(teamName,
+              textDirection: TextDirection.rtl,
+              style: GoogleFonts.alexandria(
+                  color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text('دورك للإجابة!',
+              textDirection: TextDirection.rtl,
+              style: GoogleFonts.alexandria(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1)),
+        ],
+      ),
+    ).animate().fadeIn(duration: 200.ms).scale(
+          begin: const Offset(0.9, 0.9),
+          end: const Offset(1.0, 1.0),
+          duration: 250.ms,
+        );
+  }
+}
+
+/// Correct-answer result — points added to the team that buzzed in.
+class _R1ScoredCard extends StatelessWidget {
+  final Color color;
+  const _R1ScoredCard({super.key, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Question card
-        AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, __) => Opacity(
-            opacity: _ctrl.value.clamp(0.0, 1.0),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D1428),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1E2A45)),
-              ),
-              child: Text(
-                'ما هي عاصمة مصر؟',
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.alexandria(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700),
-              ),
-            ),
+        Icon(Icons.check_circle_rounded, color: AppColors.greenSuccess, size: 40)
+            .animate()
+            .scale(
+                begin: const Offset(0.6, 0.6),
+                end: const Offset(1.0, 1.0),
+                duration: 300.ms,
+                curve: Curves.easeOutBack),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.4)),
           ),
-        ),
-        const SizedBox(height: 20),
-        // Buzzer
-        AnimatedBuilder(
-          animation: _buzz,
-          builder: (_, __) {
-            final lit = _buzz.value > 0.5;
-            return Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: lit ? widget.color : widget.color.withOpacity(0.2),
-                boxShadow: lit
-                    ? [
-                        BoxShadow(
-                            color: widget.color.withOpacity(0.6),
-                            blurRadius: 24,
-                            spreadRadius: 4)
-                      ]
-                    : [],
-              ),
-              child: Icon(Icons.radio_button_checked_rounded,
-                  color: lit ? Colors.white : Colors.white38, size: 36),
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-        // Score
-        AnimatedBuilder(
-          animation: _score,
-          builder: (_, __) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-            decoration: BoxDecoration(
-              color: widget.color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: widget.color.withOpacity(0.4)),
-            ),
-            child: Text(
-              '+$_scoreVal نقطة',
-              style: GoogleFonts.alexandria(
-                  color: widget.color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900),
-            ),
+          child: Text(
+            '+١٠ نقطة',
+            style: GoogleFonts.alexandria(
+                color: color, fontSize: 16, fontWeight: FontWeight.w900),
           ),
         ),
       ],
@@ -995,7 +1124,9 @@ class _BuzzerRaceAnimationState extends State<_BuzzerRaceAnimation>
   }
 }
 
-/// Animated pair competition for R2
+/// Animated pair competition for R2 — the shared countdown starts the
+/// moment the question is shown for the pair, exactly like the real screen,
+/// then whichever team buzzes first lights up.
 class _PairCompeteAnimation extends StatefulWidget {
   const _PairCompeteAnimation();
 
@@ -1003,82 +1134,127 @@ class _PairCompeteAnimation extends StatefulWidget {
   State<_PairCompeteAnimation> createState() => _PairCompeteAnimationState();
 }
 
-class _PairCompeteAnimationState extends State<_PairCompeteAnimation>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
+class _PairCompeteAnimationState extends State<_PairCompeteAnimation> {
+  static const _waitSeconds = 5;
   bool _redWins = true;
+  bool _resolved = false;
+  int _secondsLeft = _waitSeconds;
+  Timer? _tickTimer;
+  Timer? _stageTimer;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 2000))
-      ..addStatusListener((s) {
-        if (s == AnimationStatus.completed) {
-          Future.delayed(const Duration(milliseconds: 600), () {
-            if (mounted) setState(() => _redWins = !_redWins);
-            _ctrl.forward(from: 0);
-          });
-        }
-      });
-    _ctrl.forward();
+    _runWaiting();
+  }
+
+  void _runWaiting() {
+    setState(() {
+      _resolved = false;
+      _secondsLeft = _waitSeconds;
+    });
+    _tickTimer?.cancel();
+    _tickTimer = Timer.periodic(const Duration(milliseconds: 550), (t) {
+      if (!mounted) return;
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 1) {
+        t.cancel();
+        setState(() {
+          _resolved = true;
+          _redWins = !_redWins;
+        });
+        _stageTimer?.cancel();
+        _stageTimer = Timer(const Duration(milliseconds: 1600), _runWaiting);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _tickTimer?.cancel();
+    _stageTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        final winnerGlow = _ctrl.value > 0.7;
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    final low = _secondsLeft <= 2;
+    final timerColor = low ? const Color(0xFFE53935) : const Color(0xFF1565C0);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Shared countdown — already ticking for both teams.
+        SizedBox(
+          width: 46,
+          height: 46,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(46, 46),
+                painter: _ArcPainter(
+                  fraction: _resolved ? 1 : _secondsLeft / _waitSeconds,
+                  color: timerColor,
+                ),
+              ),
+              Text(_resolved ? '⚡' : '$_secondsLeft',
+                  style: GoogleFonts.alexandria(
+                      color: timerColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _TeamBlock(
-                  name: 'الأحمر',
-                  color: const Color(0xFFE53935),
-                  glowing: winnerGlow && _redWins,
-                  buzzFraction: _redWins ? _ctrl.value : 0,
-                ),
-                Column(children: [
-                  const Icon(Icons.compare_arrows_rounded,
-                      color: Colors.white24, size: 28),
-                  const SizedBox(height: 4),
-                  Text('vs',
-                      style: GoogleFonts.alexandria(
-                          color: Colors.white24, fontSize: 11)),
-                ]),
-                _TeamBlock(
-                  name: 'الأزرق',
-                  color: const Color(0xFF1E88E5),
-                  glowing: winnerGlow && !_redWins,
-                  buzzFraction: !_redWins ? _ctrl.value : 0,
-                ),
-              ],
+            _TeamBlock(
+              name: 'الأحمر',
+              color: const Color(0xFFE53935),
+              glowing: _resolved && _redWins,
+              buzzFraction: _resolved && _redWins ? 1 : 0,
             ),
-            const SizedBox(height: 20),
-            if (winnerGlow)
-              Text(
-                _redWins
-                    ? '🔴 الفريق الأحمر يجاوب!'
-                    : '🔵 الفريق الأزرق يجاوب!',
-                textDirection: TextDirection.rtl,
-                style: GoogleFonts.alexandria(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700),
-              ).animate().fadeIn(duration: 300.ms),
+            Column(children: [
+              const Icon(Icons.compare_arrows_rounded,
+                  color: Colors.white24, size: 28),
+              const SizedBox(height: 4),
+              Text('vs',
+                  style: GoogleFonts.alexandria(
+                      color: Colors.white24, fontSize: 11)),
+            ]),
+            _TeamBlock(
+              name: 'الأزرق',
+              color: const Color(0xFF1E88E5),
+              glowing: _resolved && !_redWins,
+              buzzFraction: _resolved && !_redWins ? 1 : 0,
+            ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 16),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _resolved
+              ? Text(
+                  _redWins
+                      ? '🔴 الفريق الأحمر يجاوب!'
+                      : '🔵 الفريق الأزرق يجاوب!',
+                  key: const ValueKey('winner'),
+                  textDirection: TextDirection.rtl,
+                  style: GoogleFonts.alexandria(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700),
+                )
+              : Text(
+                  'بانتظار الضغط على الزرار…',
+                  key: const ValueKey('waiting'),
+                  textDirection: TextDirection.rtl,
+                  style:
+                      GoogleFonts.alexandria(color: Colors.white38, fontSize: 11),
+                ),
+        ),
+      ],
     );
   }
 }

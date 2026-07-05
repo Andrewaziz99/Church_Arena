@@ -45,10 +45,16 @@ class _TvScreenState extends State<TvScreen> {
             FadeTransition(opacity: anim, child: child),
         child: payload == null || payload.type == TvPayloadType.clear
             ? _IdleView(key: const ValueKey('idle'))
-            : _QuestionView(
-                key: ValueKey('${payload.text}_${payload.type.name}'),
-                payload: payload,
-              ),
+            : payload.type == TvPayloadType.buzzed
+                ? _BuzzedTakeoverView(
+                    key: ValueKey(
+                        'buzzed_${payload.buzzedTeamName}_${payload.buzzCountdown}'),
+                    payload: payload,
+                  )
+                : _QuestionView(
+                    key: ValueKey('${payload.text}_${payload.type.name}'),
+                    payload: payload,
+                  ),
       ),
     );
   }
@@ -165,7 +171,29 @@ class _QuestionView extends StatelessWidget {
     final isReveal = payload.type == TvPayloadType.reveal;
     final hasOptions = payload.options.isNotEmpty;
     final roundLabel = 'ROUND ${payload.roundNumber}';
+    final hasTimer = !isReveal &&
+        payload.timerTotal != null &&
+        payload.timerTotal! > 0;
 
+    return Stack(
+      children: [
+        _buildBody(isReveal, hasOptions, roundLabel),
+        // ── Big, hard-to-miss countdown badge ─────────────────────────────
+        if (hasTimer)
+          Positioned(
+            top: 78,
+            right: 32,
+            child: _TvTimerRing(
+              remaining: payload.timerRemaining ?? 0,
+              total: payload.timerTotal!,
+              size: 120,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBody(bool isReveal, bool hasOptions, String roundLabel) {
     return Column(
       children: [
         // ── Top bar ────────────────────────────────────────────────────────
@@ -409,6 +437,204 @@ class _QuestionView extends StatelessWidget {
       ],
     );
   }
+}
+
+// ── Buzzed-in full-screen takeover ────────────────────────────────────────────
+
+class _BuzzedTakeoverView extends StatelessWidget {
+  final TvPayload payload;
+  const _BuzzedTakeoverView({super.key, required this.payload});
+
+  @override
+  Widget build(BuildContext context) {
+    final teamColor = payload.buzzedTeamColor != null
+        ? Color(payload.buzzedTeamColor!)
+        : const Color(0xFFFF6B2B);
+    final teamName = payload.buzzedTeamName ?? '';
+    final count = payload.buzzCountdown ?? 0;
+
+    return Container(
+      key: const ValueKey('buzzed'),
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment.center,
+          radius: 0.9,
+          colors: [
+            teamColor.withOpacity(0.55),
+            const Color(0xFF050A18),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'BUZZED IN',
+              style: GoogleFonts.alexandria(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Colors.white54,
+                letterSpacing: 6,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              teamName,
+              textAlign: TextAlign.center,
+              textDirection: TextDirection.rtl,
+              style: GoogleFonts.alexandria(
+                fontSize: 88,
+                fontWeight: FontWeight.w900,
+                color: teamColor,
+                letterSpacing: 1,
+                shadows: [
+                  Shadow(color: teamColor.withOpacity(0.8), blurRadius: 40),
+                ],
+              ),
+            )
+                .animate(onPlay: (c) => c.repeat())
+                .shimmer(duration: 1200.ms, color: Colors.white38),
+            const SizedBox(height: 56),
+            Container(
+              width: 130,
+              height: 130,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: teamColor, width: 5),
+                color: teamColor.withOpacity(0.15),
+              ),
+              child: Center(
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    color: teamColor,
+                    fontSize: 64,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ).animate(key: ValueKey(count)).scale(
+                  begin: const Offset(1.3, 1.3),
+                  end: const Offset(1.0, 1.0),
+                  duration: 300.ms,
+                  curve: Curves.easeOut,
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── On-screen countdown ring ──────────────────────────────────────────────────
+
+class _TvTimerRing extends StatelessWidget {
+  final int remaining;
+  final int total;
+  final double size;
+  const _TvTimerRing({
+    required this.remaining,
+    required this.total,
+    this.size = 44,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = total > 0 ? (remaining.clamp(0, total)) / total : 0.0;
+    final isLow = remaining <= 5;
+    final color = isLow ? const Color(0xFFE53935) : const Color(0xFFFF6B2B);
+    final strokeWidth = size / 11;
+    final fontSize = size * 0.4;
+
+    Widget ring = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF0D1428).withOpacity(0.85),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.55),
+            blurRadius: size * 0.35,
+            spreadRadius: size * 0.03,
+          ),
+        ],
+      ),
+      child: CustomPaint(
+        painter: _TvTimerRingPainter(
+          fraction: fraction,
+          color: color,
+          strokeWidth: strokeWidth,
+        ),
+        child: Center(
+          child: Text(
+            '$remaining',
+            style: TextStyle(
+              color: color,
+              fontSize: fontSize,
+              fontWeight: FontWeight.w900,
+              shadows: [Shadow(color: color.withOpacity(0.7), blurRadius: 12)],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (isLow) {
+      ring = ring
+          .animate(onPlay: (c) => c.repeat(reverse: true))
+          .scale(
+            begin: const Offset(1.0, 1.0),
+            end: const Offset(1.12, 1.12),
+            duration: 400.ms,
+          );
+    }
+    return ring;
+  }
+}
+
+class _TvTimerRingPainter extends CustomPainter {
+  final double fraction;
+  final Color color;
+  final double strokeWidth;
+  _TvTimerRingPainter({
+    required this.fraction,
+    required this.color,
+    this.strokeWidth = 4,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - strokeWidth;
+
+    final bgPaint = Paint()
+      ..color = Colors.white24
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    final fgPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, bgPaint);
+
+    final sweepAngle = 2 * 3.14159265 * fraction;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -3.14159265 / 2,
+      sweepAngle,
+      false,
+      fgPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TvTimerRingPainter oldDelegate) =>
+      oldDelegate.fraction != fraction || oldDelegate.color != color;
 }
 
 // ── Small chip label ──────────────────────────────────────────────────────────

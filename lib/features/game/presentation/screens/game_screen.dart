@@ -99,7 +99,13 @@ class _GameScreenState extends State<GameScreen> {
               }
 
               // ── TV: send current question on every relevant transition ──
-              void sendToTv(Question q, int round, {bool reveal = false}) {
+              void sendToTv(
+                Question q,
+                int round, {
+                bool reveal = false,
+                int? timerRemaining,
+                int? timerTotal,
+              }) {
                 final payload = TvPayload(
                   type: reveal ? TvPayloadType.reveal : TvPayloadType.question,
                   text: q.text,
@@ -107,6 +113,8 @@ class _GameScreenState extends State<GameScreen> {
                   correctAnswer: reveal ? q.correctAnswer : null,
                   points: q.points,
                   roundNumber: round,
+                  timerRemaining: reveal ? null : timerRemaining,
+                  timerTotal: reveal ? null : timerTotal,
                 );
                 if (reveal) {
                   TvWindowService.instance.revealAnswer(payload);
@@ -118,18 +126,58 @@ class _GameScreenState extends State<GameScreen> {
               if (state is GameWaitingBuzz) {
                 final s = state.session;
                 if (s.currentQuestionIndex < s.questions.length) {
-                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                  sendToTv(
+                    s.questions[s.currentQuestionIndex],
+                    s.roundNumber,
+                    timerRemaining: s.timerRemaining,
+                    timerTotal: s.timerSeconds,
+                  );
+                }
+              } else if (state is GameWaitingSecondTeam) {
+                final s = state.session;
+                if (s.currentQuestionIndex < s.questions.length) {
+                  sendToTv(
+                    s.questions[s.currentQuestionIndex],
+                    s.roundNumber,
+                    timerRemaining: s.timerRemaining,
+                    timerTotal: s.timerSeconds,
+                  );
                 }
               } else if (state is GameInProgress) {
                 final s = state.session;
                 if (s.currentQuestionIndex < s.questions.length) {
-                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                  sendToTv(
+                    s.questions[s.currentQuestionIndex],
+                    s.roundNumber,
+                    timerRemaining: s.timerRemaining,
+                    timerTotal: s.timerSeconds,
+                  );
                 }
               } else if (state is GamePressureQuestion) {
                 final s = state.session;
                 if (s.currentQuestionIndex < s.questions.length) {
-                  sendToTv(s.questions[s.currentQuestionIndex], s.roundNumber);
+                  sendToTv(
+                    s.questions[s.currentQuestionIndex],
+                    s.roundNumber,
+                    timerRemaining: s.timerRemaining,
+                    timerTotal: s.sharedTimerSeconds,
+                  );
                 }
+              } else if (state is GameBuzzedDisplay) {
+                final s = state.session;
+                final team = s.buzzedTeamId != null && s.teams.isNotEmpty
+                    ? s.teams.firstWhere(
+                        (t) => t.id == s.buzzedTeamId,
+                        orElse: () => s.teams.first,
+                      )
+                    : null;
+                TvWindowService.instance.showBuzzed(TvPayload(
+                  type: TvPayloadType.buzzed,
+                  roundNumber: s.roundNumber,
+                  buzzedTeamName: team?.name,
+                  buzzedTeamColor: team?.color,
+                  buzzCountdown: state.secondsLeft,
+                ));
               } else if (state is GameShowingAnswer) {
                 sendToTv(state.question, state.session.roundNumber,
                     reveal: true);
@@ -137,7 +185,8 @@ class _GameScreenState extends State<GameScreen> {
                 sendToTv(state.question, state.session.roundNumber);
               } else if (state is GameRoundTransition ||
                   state is GameTeamTurn ||
-                  state is GamePairDisplay) {
+                  state is GamePairDisplay ||
+                  state is GameQuestionTransition) {
                 TvWindowService.instance.clearScreen();
               }
             },
@@ -159,6 +208,12 @@ class _GameScreenState extends State<GameScreen> {
                 return _BothWrongScreen(
                   session: state.session,
                   question: state.question,
+                );
+              }
+              if (state is GameQuestionTransition) {
+                return _QuestionTransitionScreen(
+                  session: state.session,
+                  secondsLeft: state.secondsLeft,
                 );
               }
 
@@ -357,6 +412,87 @@ class _BuzzedDisplayScreen extends StatelessWidget {
                       style: TextStyle(
                         color: teamColor,
                         fontSize: 54,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ).animate(key: ValueKey(secondsLeft)).scale(
+                      begin: const Offset(1.3, 1.3),
+                      end: const Offset(1.0, 1.0),
+                      duration: 300.ms,
+                      curve: Curves.easeOut,
+                    ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Brief pause before the next question ──────────────────────────────────────
+
+class _QuestionTransitionScreen extends StatelessWidget {
+  final GameSession session;
+  final int secondsLeft;
+
+  const _QuestionTransitionScreen({
+    required this.session,
+    required this.secondsLeft,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 0.85,
+                  colors: [Color(0xFF1E2A45), Colors.black],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: TeamScoresBar(teams: session.teams),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'السؤال التالي بعد...',
+                  textDirection: TextDirection.rtl,
+                  style: GoogleFonts.alexandria(
+                    color: Colors.white70,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.blueContent, width: 4),
+                    color: AppColors.blueContent.withOpacity(0.15),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$secondsLeft',
+                      style: const TextStyle(
+                        color: AppColors.blueContent,
+                        fontSize: 44,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1786,12 +1922,19 @@ class _RightPanel extends StatelessWidget {
                         final bloc = context.read<GameBloc>().state;
                         GameSession? session;
                         Question? q;
+                        int? timerTotal;
                         if (bloc is GameWaitingBuzz) {
                           session = bloc.session;
+                          timerTotal = session.timerSeconds;
+                        } else if (bloc is GameWaitingSecondTeam) {
+                          session = bloc.session;
+                          timerTotal = session.timerSeconds;
                         } else if (bloc is GameInProgress) {
                           session = bloc.session;
+                          timerTotal = session.timerSeconds;
                         } else if (bloc is GamePressureQuestion) {
                           session = bloc.session;
+                          timerTotal = session.sharedTimerSeconds;
                         }
                         if (session != null &&
                             session.currentQuestionIndex <
@@ -1803,6 +1946,8 @@ class _RightPanel extends StatelessWidget {
                             options: q.options,
                             points: q.points,
                             roundNumber: session.roundNumber,
+                            timerRemaining: session.timerRemaining,
+                            timerTotal: timerTotal,
                           ));
                         }
                       }

@@ -84,6 +84,9 @@ class TvWindowService {
   Future<void> revealAnswer(TvPayload payload) =>
       _send('revealAnswer', payload.toJson());
 
+  Future<void> showBuzzed(TvPayload payload) =>
+      _send('showBuzzed', payload.toJson());
+
   Future<void> clearScreen() => _send('clearScreen', {});
 
   Future<void> _send(String method, Map<String, dynamic> data) async {

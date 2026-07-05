@@ -91,6 +91,17 @@ class GamePressureQuestion extends GameState {
   List<Object> get props => [session];
 }
 
+/// Brief automatic pause (3→1) between one question resolving and the next
+/// one appearing — covers skip / correct / wrong / timeout, but not the
+/// operator-confirmed team-turn / pair-display screens.
+class GameQuestionTransition extends GameState {
+  final GameSession session;
+  final int secondsLeft;
+  const GameQuestionTransition(this.session, this.secondsLeft);
+  @override
+  List<Object> get props => [session, secondsLeft];
+}
+
 /// Showing the correct answer highlighted for ~2 seconds, then auto-advancing.
 /// Emitted after a correct answer (R1/R2) or after "Reveal Answer" (both-wrong).
 class GameShowingAnswer extends GameState {

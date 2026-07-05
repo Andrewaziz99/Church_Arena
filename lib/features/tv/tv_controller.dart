@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 // ── Payload sent from main window → TV window ─────────────────────────────────
 
-enum TvPayloadType { question, reveal, clear }
+enum TvPayloadType { question, reveal, buzzed, clear }
 
 class TvPayload {
   final TvPayloadType type;
@@ -12,6 +12,18 @@ class TvPayload {
   final int points;
   final int roundNumber;
 
+  /// Seconds left on the main countdown (question / answer timer). Null hides
+  /// the on-screen timer.
+  final int? timerRemaining;
+  /// Total length of that countdown, used to draw the progress ring.
+  final int? timerTotal;
+
+  /// Set only for [TvPayloadType.buzzed]: the team that hit the buzzer.
+  final String? buzzedTeamName;
+  final int? buzzedTeamColor;
+  /// 3 → 2 → 1 countdown shown during the buzzed takeover.
+  final int? buzzCountdown;
+
   const TvPayload({
     required this.type,
     this.text = '',
@@ -19,6 +31,11 @@ class TvPayload {
     this.correctAnswer,
     this.points = 0,
     this.roundNumber = 1,
+    this.timerRemaining,
+    this.timerTotal,
+    this.buzzedTeamName,
+    this.buzzedTeamColor,
+    this.buzzCountdown,
   });
 
   Map<String, dynamic> toJson() => {
@@ -28,6 +45,11 @@ class TvPayload {
         'correct_answer': correctAnswer,
         'points': points,
         'round_number': roundNumber,
+        'timer_remaining': timerRemaining,
+        'timer_total': timerTotal,
+        'buzzed_team_name': buzzedTeamName,
+        'buzzed_team_color': buzzedTeamColor,
+        'buzz_countdown': buzzCountdown,
       };
 
   factory TvPayload.fromJson(Map<String, dynamic> j) => TvPayload(
@@ -37,6 +59,11 @@ class TvPayload {
         correctAnswer: j['correct_answer'] as String?,
         points: j['points'] as int? ?? 0,
         roundNumber: j['round_number'] as int? ?? 1,
+        timerRemaining: j['timer_remaining'] as int?,
+        timerTotal: j['timer_total'] as int?,
+        buzzedTeamName: j['buzzed_team_name'] as String?,
+        buzzedTeamColor: j['buzzed_team_color'] as int?,
+        buzzCountdown: j['buzz_countdown'] as int?,
       );
 }
 
