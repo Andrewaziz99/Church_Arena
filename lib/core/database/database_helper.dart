@@ -42,6 +42,13 @@ class DatabaseHelper {
     return openDatabase(
       path,
       version: _dbVersion,
+      onConfigure: (db) async {
+        // WAL mode allows one writer + concurrent readers — eliminates most
+        // "database is locked" (code 5) errors from parallel Supabase sync.
+        await db.execute('PRAGMA journal_mode=WAL');
+        // Wait up to 5 s before giving up on a lock instead of failing instantly.
+        await db.execute('PRAGMA busy_timeout=5000');
+      },
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
