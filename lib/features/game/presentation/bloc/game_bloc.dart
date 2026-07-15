@@ -201,67 +201,56 @@ class GameBloc extends Bloc<GameEvent, GameState> {
 
   // ── R1 advancement ────────────────────────────────────────────────────────
 
+  /// R1 turns rotate one-to-one between teams: team 1 gets question 1, team 2
+  /// gets question 2, team 1 gets question 3, and so on (round-robin over the
+  /// flat [session.questions] list). Each hand-off shows the full "Team X's
+  /// turn" screen.
   Future<void> _advanceR1Question(
       GameSession session, Emitter<GameState> emit) async {
     final doneCounts = List<int>.from(session.teamQuestionsDone);
     if (session.currentTeamIndex < doneCounts.length) {
       doneCounts[session.currentTeamIndex]++;
     }
-    final currentTeamDone = session.currentTeamIndex < doneCounts.length
-        ? doneCounts[session.currentTeamIndex]
-        : session.questionsPerTeam;
 
-    if (currentTeamDone >= session.questionsPerTeam) {
-      // Current team finished their questions
-      final nextTeamIdx = session.currentTeamIndex + 1;
-      if (nextTeamIdx >= session.teams.length) {
-        // All teams done → R1 complete
-        emit(GameRoundTransition(session.teams, 1));
-      } else {
-        final nextQIdx = nextTeamIdx * session.questionsPerTeam;
-        if (nextQIdx >= session.questions.length) {
-          emit(GameRoundTransition(session.teams, 1));
-          return;
-        }
-        final updated = session.copyWith(
-          currentTeamIndex: nextTeamIdx,
-          teamQuestionsDone: doneCounts,
-          currentQuestionIndex: nextQIdx,
-          buzzedTeamId: null,
-          firstWrongTeamId: null,
-          isDoubleActive: false,
-          timerRemaining: session.timerSeconds,
-        );
-        await repository.saveSession(updated);
-        arduinoService.resetBuzzers();
-        emit(GameTeamTurn(updated));
-      }
-    } else {
-      // Same team, next question
-      final nextQIdx =
-          session.currentTeamIndex * session.questionsPerTeam + currentTeamDone;
-      if (nextQIdx >= session.questions.length) {
-        // Ran out of questions for this team — treat as done
-        await _advanceR1Question(
-            session.copyWith(
-              teamQuestionsDone: doneCounts..[session.currentTeamIndex] =
-                  session.questionsPerTeam - 1,
-            ),
-            emit);
-        return;
-      }
-      final updated = session.copyWith(
-        teamQuestionsDone: doneCounts,
-        currentQuestionIndex: nextQIdx,
-        buzzedTeamId: null,
-        firstWrongTeamId: null,
-        isDoubleActive: false,
-        timerRemaining: session.timerSeconds,
-      );
-      await repository.saveSession(updated);
-      arduinoService.resetBuzzers();
-      _beginQuestionTransition(updated, emit, isPressure: false);
+    // All teams have answered their share of questions → R1 complete.
+    final allDone = doneCounts.isNotEmpty &&
+        doneCounts.every((d) => d >= session.questionsPerTeam);
+    if (allDone) {
+      emit(GameRoundTransition(session.teams, 1));
+      return;
     }
+
+    // Pass the turn to the next team in order, skipping any team that has
+    // already finished its questions.
+    int nextTeamIdx = session.currentTeamIndex;
+    for (int step = 0; step < session.teams.length; step++) {
+      nextTeamIdx = (nextTeamIdx + 1) % session.teams.length;
+      if (nextTeamIdx < doneCounts.length &&
+          doneCounts[nextTeamIdx] < session.questionsPerTeam) {
+        break;
+      }
+    }
+
+    final nextDone =
+        nextTeamIdx < doneCounts.length ? doneCounts[nextTeamIdx] : 0;
+    final nextQIdx = nextDone * session.teams.length + nextTeamIdx;
+    if (nextQIdx >= session.questions.length) {
+      emit(GameRoundTransition(session.teams, 1));
+      return;
+    }
+
+    final updated = session.copyWith(
+      currentTeamIndex: nextTeamIdx,
+      teamQuestionsDone: doneCounts,
+      currentQuestionIndex: nextQIdx,
+      buzzedTeamId: null,
+      firstWrongTeamId: null,
+      isDoubleActive: false,
+      timerRemaining: session.timerSeconds,
+    );
+    await repository.saveSession(updated);
+    arduinoService.resetBuzzers();
+    emit(GameTeamTurn(updated));
   }
 
   // ── R2 advancement ────────────────────────────────────────────────────────
